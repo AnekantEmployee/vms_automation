@@ -2,8 +2,8 @@ beautifulsoup4==4.13.4
 langchain==0.3.27
 langchain_core==0.3.74
 langchain_google_genai==2.1.9
+numpy==2.3.2
 pandas==2.3.1
 python-dotenv==1.1.1
 Requests==2.32.4
 streamlit==1.47.1
-streamlit==1.48.0
