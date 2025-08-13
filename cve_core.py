@@ -1,0 +1,96 @@
+import os
+from utils.core_functions import combined_cve_search
+
+# LangChain imports
+from langchain.tools import Tool
+from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage
+
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+
+class CVESearchAgent:
+    """Enhanced CVE Search Agent with detailed information processing"""
+
+    def __init__(self):
+        if not os.getenv("GOOGLE_API_KEY"):
+            raise ValueError("GOOGLE_API_KEY environment variable not set!")
+
+        self.llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+        self.tools = [self._create_cve_search_tool()]
+
+        self.prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    """You are a cybersecurity expert specialized in CVE research with access to detailed vulnerability information.
+            
+Analyze the user's query and provide comprehensive insights about the found vulnerabilities:
+1. Extract key terms from the input and identify the most relevant CVEs
+2. Highlight critical vulnerabilities with high CVSS scores and their potential impact
+3. Analyze CWE (Common Weakness Enumeration) information to explain vulnerability types
+4. Review affected products and versions to assess scope
+5. Consider exploitability and impact scores for risk assessment
+6. Provide actionable security recommendations and mitigation strategies
+7. Summarize the overall risk level and urgency for patching
+
+Focus on the most critical findings and provide clear, actionable insights. Use the enhanced data including:
+- Vulnerability status and CVSS vector strings
+- CWE classifications for understanding attack patterns
+- Affected product lists for scope assessment
+- Reference links for additional context
+
+Be concise but comprehensive. Format your response clearly with proper sections.""",
+                ),
+                MessagesPlaceholder(variable_name="messages"),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ]
+        )
+
+        self.agent = create_openai_tools_agent(self.llm, self.tools, self.prompt)
+        self.agent_executor = AgentExecutor(
+            agent=self.agent, tools=self.tools, verbose=False
+        )
+
+    def _create_cve_search_tool(self):
+        """Create the MITRE-focused CVE search tool"""
+
+        def search_cve(query: str) -> str:
+            results = combined_cve_search(
+                query, max_results=6
+            )  # Reduced for AI context
+
+            if not results:
+                return f"No CVE entries found for query: {query}"
+
+            formatted_results = []
+            for result in results:
+                formatted_results.append(
+                    f"CVE ID: {result.cve_id} (Source: {result.source})\n"
+                    f"Severity: {result.severity} (Score: {result.score})\n"
+                    f"Published: {result.published_date}\n"
+                    f"Description: {result.description[:200]}...\n"
+                    f"{'='*50}"
+                )
+
+            return "\n".join(formatted_results)
+
+        return Tool(
+            name="mitre_cve_search",
+            description="Search MITRE CVE database for vulnerability keywords or a specific CVE ID, enhanced with NIST details.",
+            func=search_cve,
+        )
+
+    def get_ai_analysis(self, query: str) -> str:
+        """Get AI analysis of vulnerabilities"""
+        try:
+            messages = [HumanMessage(content=f"Analyze CVEs for: {query}")]
+            response = self.agent_executor.invoke({"messages": messages})
+            return response["output"]
+        except Exception as e:
+            return f"AI analysis failed: {str(e)}"
