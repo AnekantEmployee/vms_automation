@@ -1,0 +1,193 @@
+[
+  {
+    "entry": {
+      "id": "295936",
+      "title": "Brocade SANnav up to 2.3.1a SSH risky encryption",
+      "summary": "A vulnerability was found in Brocade SANnav up to 2.3.1a. It has been declared as problematic. This vulnerability affects an unknown code of the component SSH. Upgrading to version 2.3.1b eliminates this vulnerability.",
+      "details": {
+        "affected": "A vulnerability was found in Brocade SANnav up to 2.3.1a. It has been declared as problematic.",
+        "vulnerability": "The CWE definition for the vulnerability is CWE-327. The product uses a broken or risky cryptographic algorithm or protocol.",
+        "impact": "As an impact it is known to affect confidentiality.",
+        "countermeasure": "Upgrading to version 2.3.1b eliminates this vulnerability."
+      },
+      "timestamp": {
+        "create": "1739609119",
+        "change": "1739609119"
+      }
+    },
+    "software": {
+      "vendor": "Brocade",
+      "name": "SANnav",
+      "version": ["2.3.1a"],
+      "component": "SSH",
+      "license": {
+        "type": "commercial"
+      },
+      "cpe": ["cpe:/a:brocade:sannav:2.3.1a"],
+      "cpe23": ["cpe:2.3:a:brocade:sannav:2.3.1a:*:*:*:*:*:*:*"]
+    },
+    "vulnerability": {
+      "risk": {
+        "value": "1",
+        "name": "low"
+      },
+      "class": "risky encryption",
+      "cwe": "CWE-327",
+      "capec": ["20"],
+      "attck": "T1600",
+      "cvss2": {
+        "vuldb": {
+          "basescore": "2.6",
+          "tempscore": "2.3",
+          "baseseverity": "Low",
+          "tempseverity": "Low",
+          "av": "N",
+          "ac": "H",
+          "au": "N",
+          "ci": "P",
+          "ii": "N",
+          "ai": "N",
+          "e": "ND",
+          "rl": "OF",
+          "rc": "C"
+        }
+      },
+      "cvss3": {
+        "meta": {
+          "basescore": "3.7",
+          "tempscore": "3.6",
+          "baseseverity": "Low",
+          "tempseverity": "Low"
+        },
+        "vuldb": {
+          "confidence": "High",
+          "basescore": "3.7",
+          "tempscore": "3.6",
+          "basevector": "AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N",
+          "tempvector": "E:X/RL:O/RC:C",
+          "baseseverity": "Low",
+          "tempseverity": "Low",
+          "av": "N",
+          "ac": "H",
+          "pr": "N",
+          "ui": "N",
+          "s": "U",
+          "c": "L",
+          "i": "N",
+          "a": "N",
+          "e": "X",
+          "rl": "O",
+          "rc": "C"
+        }
+      },
+      "cvss4": {
+        "vuldb": {
+          "confidence": "High",
+          "bscore": "6.3",
+          "btscore": "6.3",
+          "bvector": "AV:N/AC:H/AT:P/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "btvector": "AV:N/AC:H/AT:P/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N/E:X",
+          "bseverity": "Medium",
+          "btseverity": "Medium",
+          "av": "N",
+          "ac": "H",
+          "at": "P",
+          "pr": "N",
+          "ui": "N",
+          "vc": "L",
+          "vi": "N",
+          "va": "N",
+          "sc": "N",
+          "si": "N",
+          "sa": "N",
+          "e": "X"
+        },
+        "cna": {
+          "bscore": "8.2",
+          "btscore": "8.2",
+          "bvector": "AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+          "btvector": "AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N/E:X",
+          "bseverity": "High",
+          "btseverity": "High",
+          "av": "N",
+          "ac": "L",
+          "at": "P",
+          "pr": "N",
+          "ui": "N",
+          "vc": "H",
+          "vi": "N",
+          "va": "N",
+          "sc": "N",
+          "si": "N",
+          "sa": "N",
+          "e": "X"
+        }
+      },
+      "timeline": [
+        {
+          "date": "1714168800",
+          "event": "CVE reserved",
+          "color": "blue"
+        },
+        {
+          "date": "1739574000",
+          "event": "Advisory disclosed",
+          "diff": "+294 days",
+          "color": "blue"
+        },
+        {
+          "date": "1739577600",
+          "event": "VulDB entry created",
+          "diff": "+0 days",
+          "link": "https://vuldb.com/?recent.20250215",
+          "color": "blue"
+        },
+        {
+          "date": "1739609119",
+          "event": "VulDB entry last update",
+          "diff": "+0 days",
+          "link": "https://vuldb.com/?id.295936",
+          "color": "blue"
+        }
+      ]
+    },
+    "advisory": {
+      "date": "1739574000",
+      "url": "https://support.broadcom.com/external/content/SecurityAdvisories/0/25400",
+      "reportconfidence": "confirmed"
+    },
+    "exploit": {
+      "physical": "No",
+      "local": "No",
+      "remote": "Yes",
+      "exploitability": "not defined",
+      "price": {
+        "0day": "$0-$5k",
+        "today": "$0-$5k"
+      },
+      "epss": {
+        "score": "0.00042",
+        "percentile": "0.11604"
+      }
+    },
+    "countermeasure": {
+      "remediationlevel": "official fix",
+      "name": "Upgrade",
+      "upgrade": {
+        "version": "2.3.1b"
+      }
+    },
+    "source": {
+      "cve": {
+        "id": "CVE-2024-4282",
+        "assigned": "1714168800",
+        "cna": "brocade",
+        "summary": "Brocade SANnav OVA before SANnav 2.3.1b enables SHA1 deprecated setting for SSH for port 22."
+      },
+      "gcve": {
+        "cve": "GCVE-0-2024-4282",
+        "vuldb": "GCVE-100-295936"
+      }
+    }
+  }
+]

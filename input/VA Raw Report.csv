@@ -1,0 +1,146 @@
+Linux report,08/08/2025 at 11:53:46 (GMT+0530),,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+YASH TECHNOLOGIES PRIVATE LIMITED,Indore,,Indore,Madhya Pradesh,India,560048,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Riya Jain,yasht8ra2,Manager,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Asset Groups,IPs,Active Hosts,Hosts Matching Filters,Trend Analysis,Date Range,Network,Asset Tags,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Linux Device,NONE,5,5,Latest vulnerability data,01/01/1999 - 08/08/2025,Yash_Internal,NONE,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+Total Vulnerabilities,Avg Security Risk,Business Risk,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+25,2.7,25/100,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+IP,Network,Total Vulnerabilities,Security Risk,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+10.6.16.50,Yash_Internal,11,2.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+10.6.16.51,Yash_Internal,2,2.5,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+10.9.1.50,Yash_Internal,3,3.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+10.10.1.18,Yash_Internal,3,3.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+10.26.2.61,Yash_Internal,6,2,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+IP,Network,DNS,NetBIOS,QG Host ID,IP Interfaces,Tracking Method,OS,IP Status,QID,Title,Vuln Status,Type,Severity,Port,Protocol,FQDN,SSL,First Detected,Last Detected,Times Detected,Date Last Fixed,First Reopened,Last Reopened,Times Reopened,CVE ID,Vendor Reference,Bugtraq ID,Threat,Impact,Solution,Exploitability,Associated Malware,Results,PCI Vuln,Ticket State,Instance,Category,Associated Ags,Host ID,Asset ID,QDS,ARS,ACS,TruRisk Score
+10.26.2.61,Yash_Internal,,,,,IP,Ubuntu/Linux,"host scanned, found vuln",38173,SSL Certificate - Signature Verification Failed Vulnerability,Active,Vuln,2,443,tcp,,over ssl,06-01-2025 04:24,08-01-2025 04:21,3,,,,,,,,"An SSL Certificate associates an entity (person, organization, host, etc.) with a Public Key. In an SSL connection, the client authenticates the remote server using the server's Certificate and extracts the Public Key in the Certificate to establish the secure connection. The authentication is done by verifying that the public key in the certificate is signed by a trusted third-party Certificate Authority.
+ 
+If a client is unable to verify the certificate, it can abort communication or prompt the user to continue the communication without authentication.","By exploiting this vulnerability, man-in-the-middle attacks in tandem with DNS cache poisoning can occur.
+ 
+Exception: 
+If the server communicates only with a restricted set of clients who have the server certificate or the trusted CA certificate, then the server or CA certificate may not be available publicly, and the scan will be unable to verify the signature.",Please install a server certificate signed by a trusted third-party Certificate Authority.,,,"Certificate #0 CN=10.26.2.61,OU=automation,O=amuraa,L=Pune,ST=Maharastra,C=IN ISSUER:_CN=10.26.2.61,OU=automation,O=amuraa,L=Pune,ST=Maharastra,C=IN self signed certificate#",yes,,,General remote services,Linux Device,24178374,63946455,50,608,5,608
+10.10.1.18,Yash_Internal,,,,,IP,Ubuntu Linux 22.04.5,"host scanned, found vuln",6022541,Ubuntu Security Notification for Linux kernel Vulnerabilities (USN-7682-1),New,Vuln,4,,,,,08-01-2025 04:02,08-01-2025 04:02,1,,,,,"CVE-2025-37797, CVE-2025-38083",USN-7682-1,,"Ubuntu has released a security update for linux to fix the vulnerabilities.   QID Detection Logic (Authenticated): QID utilizes the target system's package manager, such as ""dpkg"", to enumerate packages and map them with vendor advisories to identify vulnerable versions.","Successful exploitation of this vulnerability could lead to a security breach or affect integrity, availability, and confidentiality.","Refer to Ubuntu security advisory USN-7682-1 (https://ubuntu.com/security/notices/USN-7682-1) for updates and patch information.
+ Patch: 
+Following are links for downloading patches to fix the vulnerabilities:
+  USN-7682-1: Ubuntu Linux (https://ubuntu.com/security/notices/USN-7682-1)",,,"Package	Installed Version	Required Version
+linux	6.8.0-60-generic	6.8.0-65#",yes,,,Ubuntu,Linux Device,24155388,64117791,35,125,5,125
+10.9.1.50,Yash_Internal,inpnhwerpsrv.yash.com,,,,IP,Ubuntu Linux 20.04.6 ESM,"host scanned, found vuln",6022303,Ubuntu Security Notification for Linux kernel Vulnerabilities (USN-7654-1),New,Vuln,4,,,,,08-01-2025 04:20,08-01-2025 04:20,1,,,,,"CVE-2025-38009, CVE-2025-37989, CVE-2025-37768, CVE-2025-37940, CVE-2025-37840, CVE-2025-37867, CVE-2025-37739, CVE-2025-37911, CVE-2025-37766, CVE-2024-36908, CVE-2025-23144, CVE-2025-37830, CVE-2025-37913, CVE-2024-46742, CVE-2025-37844, CVE-2025-37850, CVE-2025-37964, CVE-2025-38024, CVE-2024-27402, CVE-2025-37892, CVE-2025-37994, CVE-2025-37810, CVE-2025-37857, CVE-2024-35943, CVE-2025-37742, CVE-2025-37811, CVE-2025-37967, CVE-2024-38540, CVE-2025-23146, CVE-2025-37780, CVE-2025-37823, CVE-2025-23145, CVE-2025-37909, CVE-2025-37794, CVE-2024-26686, CVE-2024-35866, CVE-2025-37914, CVE-2025-37819, CVE-2025-23142, CVE-2022-49168, CVE-2022-48893, CVE-2025-37969, CVE-2024-49989, CVE-2025-37738, CVE-2024-35867, CVE-2022-21546, CVE-2025-37836, CVE-2025-37949, CVE-2025-22062, CVE-2025-37787, CVE-2024-53128, CVE-2025-37991, CVE-2024-26739, CVE-2025-37858, CVE-2022-49535, CVE-2025-37803, CVE-2023-52572, CVE-2025-37773, CVE-2025-37789, CVE-2025-37905, CVE-2025-23147, CVE-2025-23150, CVE-2025-23157, CVE-2025-37841, CVE-2025-37875, CVE-2025-37756, CVE-2024-50258, CVE-2025-23159, CVE-2025-37796, CVE-2025-37998, CVE-2024-54458, CVE-2025-23140, CVE-2025-37982, CVE-2024-38541, CVE-2025-38023, CVE-2025-23151, CVE-2025-37881, CVE-2025-37985, CVE-2025-23161, CVE-2025-37781, CVE-2025-37995, CVE-2025-37838, CVE-2023-52757, CVE-2024-53203, CVE-2025-37859, CVE-2025-21839, CVE-2025-37740, CVE-2025-37992, CVE-2024-49960, CVE-2025-37912, CVE-2025-37765, CVE-2025-37862, CVE-2022-49063, CVE-2025-21853, CVE-2024-46816, CVE-2024-50125, CVE-2025-37771, CVE-2025-37790, CVE-2025-37983, CVE-2025-37805, CVE-2025-23156, CVE-2025-37970, CVE-2025-37829, CVE-2025-38005, CVE-2025-37812, CVE-2025-37770, CVE-2025-37839, CVE-2025-37797, CVE-2025-37792, CVE-2025-37923, CVE-2025-37927, CVE-2025-37788, CVE-2025-37817, CVE-2024-50280, CVE-2025-37767, CVE-2025-22027, CVE-2025-37749, CVE-2025-37808, CVE-2025-23158, CVE-2025-37758, CVE-2025-37824, CVE-2025-37930, CVE-2024-46751, CVE-2025-37883, CVE-2024-35790, CVE-2024-56751",USN-7654-1,,"Ubuntu has released a security update for linux to fix the vulnerabilities.   QID Detection Logic (Authenticated): QID utilizes the target system's package manager, such as ""dpkg"", to enumerate packages and map them with vendor advisories to identify vulnerable versions.","Successful exploitation of this vulnerability could lead to a security breach or affect integrity, availability, and confidentiality.","Refer to Ubuntu security advisory USN-7654-1 (https://ubuntu.com/security/notices/USN-7654-1) for updates and patch information.
+ Patch: 
+Following are links for downloading patches to fix the vulnerabilities:
+  USN-7654-1: Ubuntu Linux (https://ubuntu.com/security/notices/USN-7654-1)",,,"Package	Installed Version	Required Version
+linux	5.15.0-142-generic	5.15.0-144#",yes,,,Ubuntu,"Linux Device,Windows Critical Device",24160516,63946450,65,146,5,146
+10.9.1.50,Yash_Internal,inpnhwerpsrv.yash.com,,,,IP,Ubuntu Linux 20.04.6 ESM,"host scanned, found vuln",38909,SHA1 deprecated setting for SSH,Active,Vuln,2,22,tcp,,,06-01-2025 01:23,08-01-2025 04:20,6,,,,,,,,"The SSH protocol (Secure Shell) is a method for secure remote login from one computer to another. 
+The target is using deprecated SHA1 cryptographic settings to communicate.","vulnerable to collision attacks, which are designed to fabricate the same hash value for different input data.each hash is supposedly unique.","Avoid using deprecated cryptographic settings.  
+Use best practices when configuring SSH. 
+Refer to NIST Retires SHA-1 Cryptographic Algorithm (SSH) (https://www.nist.gov/news-events/news/2022/12/nist-retires-sha-1-cryptographic-algorithm) . 
+
+Other documents to refer 
+Deprecate settings listed for red hat (https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/7.4_release_notes/chap-red_hat_enterprise_linux-7.4_release_notes-deprecated_functionality_in_rhel7) 
+Key exchange  (https://www.ietf.org/archive/id/draft-ietf-curdle-ssh-kex-sha2-13.html) 
+CBC Cipher  (https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2008-5161) 
+SHA1 ietf reference  (https://datatracker.ietf.org/doc/html/rfc9142)   
+
+
+Settings currently considered deprecated: 
+
+1.Key exchange algorithms: 
+diffie-hellman-group1-sha1, rsa1024sha1, diffie-hellman-group14-sha1, diffie-hellman-group-exchange-sha1, gss-gex-sha1-*, gss-group1-sha1-* and gss-group14-sha1-*. 
+
+2.MAC: 
+ hmac-sha1, hmac-sha1-96, hmac-sha1-etm@openssh.com, hmac-sha1-96-etm@openssh.com 
+
+3.Host key: 
+ ssh-rsa, ssh-dss, ssh-rsa-cert-v01@openssh.com, ssh-dss-cert-v01@openssh.com",,,"Type	Name
+host key algorithm	ssh-rsa
+MAC	hmac-sha1-etm@openssh.com
+MAC	hmac-sha1#",no,,,General remote services,"Linux Device,Windows Critical Device",24160516,63946450,45,146,5,146
+10.6.16.51,Yash_Internal,inhyddaglebtrn.yash.com,,,,IP,EulerOS / Ubuntu / Fedora / Tiny Core Linux / Linux 3.x / IBM / FortiSOAR / F5 Networks Big-IP,"host scanned, found vuln",38739,Deprecated SSH Cryptographic Settings,Active,Vuln,3,22,tcp,,,06-01-2025 03:40,08-01-2025 03:36,3,,,,,,,,"The SSH protocol (Secure Shell) is a method for secure remote login from one computer to another.  
+The target is using deprecated SSH cryptographic settings to communicate.",A man-in-the-middle attacker may be able to exploit this vulnerability to record the communication to decrypt the session key and even the messages.,"Avoid using deprecated cryptographic settings.  
+Use best practices when configuring SSH. 
+Refer to Security of Interactive and Automated Access Management Using Secure Shell (SSH) (https://csrc.nist.gov/publications/detail/nistir/7966/final) . 
+Settings currently considered deprecated: 
+
+1.Ciphers using CFB or OFB: 
+These are considered uncommon and deprecated due to vulnerabilities when compared to newer cipher chaining modes such as CTR or GCM. 
+ 
+2.RC4 cipher (arcfour, arcfour128, arcfour256): 
+The RC4 cipher is no longer considered secure and exhibits cryptographic bias. 
+ 
+3.Ciphers with a 64-bit block size (DES, 3DES, Blowfish, IDEA, CAST): 
+These ciphers may be vulnerable to birthday attacks (Sweet32). 
+ 
+4.Key exchange algorithms using DH group 1 (diffie-hellman-group1-sha1, gss-group1-sha1-*): 
+DH group 1 uses a 1024-bit key size, which is considered too short and vulnerable to Logjam-style attacks. 
+
+5.Key exchange algorithm ""rsa1024sha1"": 
+This algorithm is very uncommon and deprecated due to its short RSA key size. 
+
+6.MAC algorithm ""umac-32"": 
+This algorithm is extremely uncommon and deprecated due to its very short MAC length. 
+
+7.Cipher ""none"": 
+This cipher is available only in SSHv1. 
+
+8.MAC algorithm ""MD5"": 
+All MD5 based mac algorithms are deprecated. 
+
+9.96-bit MAC: 
+both sha1 and sha2 variants of 96 bit macs are considered deprecated.  
+
+10.CBC Ciphers: 
+All CBC Ciphers are deprecated.",,,"Type	Name
+cipher	aes256-cbc
+cipher	aes128-cbc#",yes,,,General remote services,Linux Device,24155387,63902583,50,827,5,827
+10.6.16.51,Yash_Internal,inhyddaglebtrn.yash.com,,,,IP,EulerOS / Ubuntu / Fedora / Tiny Core Linux / Linux 3.x / IBM / FortiSOAR / F5 Networks Big-IP,"host scanned, found vuln",38909,SHA1 deprecated setting for SSH,Active,Vuln,2,22,tcp,,,06-01-2025 03:40,08-01-2025 03:36,3,,,,,,,,"The SSH protocol (Secure Shell) is a method for secure remote login from one computer to another. 
+The target is using deprecated SHA1 cryptographic settings to communicate.","vulnerable to collision attacks, which are designed to fabricate the same hash value for different input data.each hash is supposedly unique.","Avoid using deprecated cryptographic settings.  
+Use best practices when configuring SSH. 
+Refer to NIST Retires SHA-1 Cryptographic Algorithm (SSH) (https://www.nist.gov/news-events/news/2022/12/nist-retires-sha-1-cryptographic-algorithm) . 
+
+Other documents to refer 
+Deprecate settings listed for red hat (https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/7/html/7.4_release_notes/chap-red_hat_enterprise_linux-7.4_release_notes-deprecated_functionality_in_rhel7) 
+Key exchange  (https://www.ietf.org/archive/id/draft-ietf-curdle-ssh-kex-sha2-13.html) 
+CBC Cipher  (https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2008-5161) 
+SHA1 ietf reference  (https://datatracker.ietf.org/doc/html/rfc9142)   
+
+
+Settings currently considered deprecated: 
+
+1.Key exchange algorithms: 
+diffie-hellman-group1-sha1, rsa1024sha1, diffie-hellman-group14-sha1, diffie-hellman-group-exchange-sha1, gss-gex-sha1-*, gss-group1-sha1-* and gss-group14-sha1-*. 
+
+2.MAC: 
+ hmac-sha1, hmac-sha1-96, hmac-sha1-etm@openssh.com, hmac-sha1-96-etm@openssh.com 
+
+3.Host key: 
+ ssh-rsa, ssh-dss, ssh-rsa-cert-v01@openssh.com, ssh-dss-cert-v01@openssh.com",,,"Type	Name
+key exchange	diffie-hellman-group-exchange-sha1
+key exchange	diffie-hellman-group14-sha1
+host key algorithm	ssh-rsa
+MAC	hmac-sha1-etm@openssh.com
+MAC	hmac-sha1#",no,,,General remote services,Linux Device,24155387,63902583,45,827,5,827
+10.6.16.50,Yash_Internal,apps.example.com,,,,IP,EulerOS / Ubuntu / Fedora / Tiny Core Linux / Linux 3.x / IBM / FortiSOAR / F5 Networks Big-IP,"host scanned, found vuln",86728,Web Server Uses Plain-Text Form Based Authentication,Active,Vuln,3,8000,tcp,,,07-01-2025 05:19,08-01-2025 05:18,2,,,,,,,,The Web server uses plain-text form based authentication. A web page exists on the target host which uses an HTML login form. This data is sent from the client to the server in plain-text.,An attacker with access to the network traffic to and from the target host may be able to obtain login credentials for other users by sniffing the network traffic.,"Please contact the vendor of the hardware/software for a possible fix for the issue. For custom applications, ensure that data sent via HTML login forms is encrypted before being sent from the client to the host.",,,"GET /OA_HTML/AppsLocalLogin.jsp HTTP/1.1
+Host: apps.example.com:8000
+Connection: Keep-Alive
+
+<form id=login>
+<div id=UsernameBox class=""control_box min_margin"">
+<label for=""usernameField"" message=FND_SSO_USER_NAME>User Name</label>
+<input tabindex=0 type=""text"" id=""usernameField"" name=""usernameField"" class=""inp"" value="""" message=FND_SSO_USER_NAME >
+
+</div>
+
+<div class=""control_box min_margin"" id=logoutLink style='display:none'><a tabindex=0 name=logout message=FND_SSO_NOTSAME_USER onclick='confirmLogout()'> Not the same user?</a></div>
+<div class=""control_box min_margin"">
+<label for=""passwordField"" message=FND_SSO_PASSWORD>Password</label>
+<input tabindex=0 class=""inp"" type=""password"" id=""passwordField"" name=""passwordField"" value="""" message=FND_SSO_PASSWORD >
+</div>
+</form>#",yes,,,Web server,Linux Device,24544681,65832486,30,861,5,861
+10.6.16.50,Yash_Internal,apps.example.com,,,,IP,EulerOS / Ubuntu / Fedora / Tiny Core Linux / Linux 3.x / IBM / FortiSOAR / F5 Networks Big-IP,"host scanned, found vuln",38169,SSL Certificate - Self-Signed Certificate,Active,Vuln,2,443,tcp,,over ssl,07-01-2025 05:19,08-01-2025 05:18,2,,,,,,,,"An SSL Certificate associates an entity (person, organization, host, etc.) with a Public Key. In an SSL connection, the client authenticates the remote server using the server's Certificate and extracts the Public Key in the Certificate to establish the secure connection.
+ 
+The client can trust that the Server Certificate belongs to the server only if it is signed by a mutually trusted third-party Certificate Authority (CA). Self-signed certificates are created generally for testing purposes or to avoid paying third-party CAs. These should not be used on any production or critical servers.
+ 
+By exploiting this vulnerability, an attacker can impersonate the server by presenting a fake self-signed certificate. If the client knows that the server does not have a trusted certificate, it will accept this spoofed certificate and communicate with the remote server.","By exploiting this vulnerability, an attacker can launch a man-in-the-middle attack.",Please install a server certificate signed by a trusted third-party Certificate Authority.,,,"Certificate #1 emailAddress=root@apps,CN=apps,OU=ca-1155301825139747033,O=Unspecified,C=US  is a self signed certificate.#",yes,,,General remote services,Linux Device,24544681,65832486,50,861,5,861

@@ -356,7 +356,33 @@ def main():
         - SLA: Case-by-case assessment  
         """
         )
-        
+
+        st.divider()
+        st.subheader("📌 Severity Score Mapping (New System)")
+        st.markdown(
+            """
+            **1. Critical (1)**  
+            - CVSS ≥ 9.0 or TruRisk ≥ 800  
+            - Highest urgency / high business risk  
+            - Corresponds to **red priority**  
+
+            **2. High (2)**  
+            - CVSS 7.0–8.9 or TruRisk 600–799  
+            - Requires prompt action  
+
+            **3. Medium (3)**  
+            - CVSS 4.0–6.9 or TruRisk 400–599  
+            - Address during planned remediation cycles  
+
+            **4. Low (4)**  
+            - CVSS < 4.0 or TruRisk < 400  
+            - Minimal business risk  
+
+            **Unknown**  
+            - No CVSS/TruRisk data — Requires investigation
+            """
+        )
+
     # Initialize agent
     try:
         agent = initialize_agent()

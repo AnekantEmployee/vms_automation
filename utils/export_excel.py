@@ -7,57 +7,36 @@ import streamlit as st
 
 
 def determine_severity_score(result: Dict[str, Any]) -> str:
-    """Determine combined severity score from CVE results or original data"""
-    # Try to get from CVE results first
-    if result.get("cve_results"):
-        max_score = max(cve.score for cve in result["cve_results"])
-        trurisk = (
-            int(result["original_data"].get("TruRisk Score", 0))
-            if result["original_data"].get("TruRisk Score")
-            else None
-        )
+    """Severity: 1-Critical, 2-High, 3-Medium, 4-Low"""
+    sev_labels = ["4-Low", "4-Low", "3-Medium", "2-High", "1-Critical"]
 
-        if max_score >= 9.0:
-            base = "5-Critical"
-        elif max_score >= 7.0:
-            base = "4-High"
-        elif max_score >= 4.0:
-            base = "3-Medium"
-        else:
-            base = "2-Low"
-
-        if trurisk:
-            if trurisk >= 800 and not base.startswith(("4-", "5-")):
-                return "4-High"
-            if trurisk >= 600 and base.startswith("2-"):
-                return "3-Medium"
+    def trurisk_adj(base, trurisk):
+        if not trurisk:
+            return base
+        if trurisk >= 800 and not base.startswith(("1-", "2-")):
+            return "2-High"
+        if trurisk >= 600 and base.startswith("4-"):
+            return "3-Medium"
         return base
 
-    # Fall back to original data if no CVEs
-    severity = (
-        int(result["original_data"].get("Severity", 0))
-        if result["original_data"].get("Severity")
-        else None
-    )
-    trurisk = (
-        int(result["original_data"].get("TruRisk Score", 0))
-        if result["original_data"].get("TruRisk Score")
-        else None
-    )
+    if result.get("cve_results"):
+        max_score = max(c.score for c in result["cve_results"])
+        base = (
+            "1-Critical"
+            if max_score >= 9
+            else (
+                "2-High"
+                if max_score >= 7
+                else "3-Medium" if max_score >= 4 else "4-Low"
+            )
+        )
+        return trurisk_adj(base, result["original_data"].get("TruRisk Score"))
 
+    severity = result["original_data"].get("Severity")
     if not severity:
         return "Unknown"
-
-    levels = ["1-Low", "2-Low", "3-Medium", "4-High", "5-Critical"]
-    base = levels[min(max(severity, 1), 5) - 1]
-
-    if trurisk:
-        if trurisk >= 800 and severity < 4:
-            return "4-High"
-        if trurisk >= 600 and severity < 3:
-            return "3-Medium"
-
-    return base
+    base = sev_labels[min(max(int(severity), 1), 5) - 1]
+    return trurisk_adj(base, result["original_data"].get("TruRisk Score"))
 
 
 def get_days_diff(start_str: str, end_str: str) -> int:
@@ -159,8 +138,8 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                 "Protocol": clean_value(original_data.get("Protocol"), "-"),
                 "Port": clean_value(original_data.get("Port"), "0"),
                 "Solution": clean_value(original_data.get("Solution")),
-                "Asset Tags": "",
-                "Category": "",
+                "Asset Tags": clean_value(original_data.get("Associated Tags")),
+                "Category": clean_value(original_data.get("Category")),
                 "RTI": "",
                 "Last Reopened": clean_value(original_data.get("Last Reopened")),
                 "Times Detected": clean_value(original_data.get("Times Detected")),
