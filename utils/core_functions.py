@@ -1,12 +1,12 @@
-import requests
-from typing import List, Optional, Dict
-from dataclasses import dataclass
 import re
-from bs4 import BeautifulSoup
 import time
+import requests
 import urllib.parse
 import concurrent.futures
 from threading import Lock
+from bs4 import BeautifulSoup
+from dataclasses import dataclass
+from typing import List, Optional, Dict
 
 
 # Cache for NIST API results to avoid duplicate calls

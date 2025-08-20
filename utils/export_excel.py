@@ -1,191 +1,26 @@
 import io
+import asyncio
 import pandas as pd
-import numpy as np
 from typing import Dict, Any
-from datetime import datetime
-import streamlit as st
+from .remediation_agent import get_enhanced_remediation_data
+from .export_utils import determine_severity_score, get_days_diff, is_nan, clean_value, simplify_date, determine_sla_status
 
-
-def determine_severity_score(result: Dict[str, Any]) -> str:
-    """Severity: 1-Critical, 2-High, 3-Medium, 4-Low"""
-    sev_labels = ["4-Low", "4-Low", "3-Medium", "2-High", "1-Critical"]
-
-    def trurisk_adj(base, trurisk):
-        if not trurisk:
-            return base
-        try:
-            trurisk_val = float(trurisk) if not is_nan(trurisk) else 0
-            if trurisk_val >= 800 and not base.startswith(("1-", "2-")):
-                return "2-High"
-            if trurisk_val >= 600 and base.startswith("4-"):
-                return "3-Medium"
-        except (ValueError, TypeError):
-            pass
-        return base
-
-    if result.get("cve_results"):
-        max_score = max(c.score for c in result["cve_results"])
-        base = (
-            "1-Critical"
-            if max_score >= 9
-            else (
-                "2-High"
-                if max_score >= 7
-                else "3-Medium" if max_score >= 4 else "4-Low"
-            )
-        )
-        return trurisk_adj(base, result["original_data"].get("TruRisk Score"))
-
-    severity = result["original_data"].get("Severity")
-    if not severity or is_nan(severity):
-        return "Unknown"
-    
-    try:
-        severity_val = int(float(str(severity)))
-        base = sev_labels[min(max(severity_val, 1), 5) - 1]
-        return trurisk_adj(base, result["original_data"].get("TruRisk Score"))
-    except (ValueError, TypeError):
-        return "Unknown"
-
-
-def get_days_diff(start_str: str, end_str: str) -> int:
-    """Calculate days difference with robust error handling"""
-    if not start_str or not end_str or is_nan(start_str) or is_nan(end_str):
-        return 0
-        
-    fmt = "%m-%d-%Y %H:%M"
-    alt_fmt = "%m/%d/%Y %H:%M"
-    
-    try:
-        # Try primary format
-        start_date = datetime.strptime(str(start_str).strip(), fmt)
-        end_date = datetime.strptime(str(end_str).strip(), fmt)
-        return max(0, (end_date - start_date).days)
-    except ValueError:
-        try:
-            # Try alternative format
-            start_date = datetime.strptime(str(start_str).strip(), alt_fmt)
-            end_date = datetime.strptime(str(end_str).strip(), alt_fmt)
-            return max(0, (end_date - start_date).days)
-        except ValueError:
-            return 0
-
-
-def is_nan(value):
-    """Check if value is NaN/None/empty in a pandas-compatible way"""
-    if value is None:
-        return True
-    if isinstance(value, float) and np.isnan(value):
-        return True
-    if isinstance(value, str) and value.lower().strip() in ["nan", "none", "", "nat"]:
-        return True
-    try:
-        if pd.isna(value):
-            return True
-    except:
-        pass
-    return False
-
-
-def clean_value(value, default=""):
-    """Convert any NaN/None values to default with type safety"""
-    if is_nan(value):
-        return default
-    try:
-        return str(value).strip()
-    except:
-        return default
-
-
-def safe_int_conversion(value, default=0):
-    """Safely convert value to integer"""
-    if is_nan(value):
-        return default
-    try:
-        # Handle string representations of numbers
-        if isinstance(value, str):
-            value = value.strip()
-            if not value:
-                return default
-        return int(float(value))
-    except (ValueError, TypeError):
-        return default
-
-
-def simplify_date(date):
-    """Convert date string with robust NaN/None handling"""
-    if is_nan(date):
-        return ""
-    
-    date_str = clean_value(date)
-    if not date_str:
-        return ""
-        
-    try:
-        # Handle multiple date formats
-        for fmt in ("%m-%d-%Y %H:%M", "%m/%d/%Y %H:%M", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
-            try:
-                dt_obj = datetime.strptime(date_str, fmt)
-                return f"{dt_obj.strftime('%B')} {dt_obj.day}, {dt_obj.year}"
-            except ValueError:
-                continue
-        
-        # If no format matched, try to extract at least the date part
-        date_part = date_str.split()[0] if ' ' in date_str else date_str
-        for fmt in ("%m-%d-%Y", "%m/%d/%Y", "%Y-%m-%d"):
-            try:
-                dt_obj = datetime.strptime(date_part, fmt)
-                return f"{dt_obj.strftime('%B')} {dt_obj.day}, {dt_obj.year}"
-            except ValueError:
-                continue
-                
-        return date_str  # Return original if no format matched
-    except (ValueError, TypeError):
-        return ""
-
-
-def determine_sla_status(severity_score: str, vulnerability_age) -> str:
-    """Determine SLA status based on severity and age thresholds with robust type handling"""
-    # Safely convert vulnerability_age to integer
-    try:
-        if is_nan(vulnerability_age):
-            age_days = 0
-        elif isinstance(vulnerability_age, str):
-            age_days = safe_int_conversion(vulnerability_age.strip(), 0)
-        else:
-            age_days = safe_int_conversion(vulnerability_age, 0)
-    except:
-        age_days = 0
-
-    if not severity_score or is_nan(severity_score):
-        return "N/A - Needs Assessment"
-
-    severity_str = clean_value(severity_score)
-    
-    # Define thresholds based on severity score prefixes
-    thresholds = {
-        "1-": ("Critical", 7),
-        "2-": ("High", 14), 
-        "3-": ("Medium", 30),
-        "4-": ("Low", 90),
-    }
-
-    for prefix, (level, threshold_days) in thresholds.items():
-        if severity_str.startswith(prefix):
-            status = "Breached" if age_days > threshold_days else "Within SLA"
-            return status
-
-    return "N/A - Needs Assessment"
-
-
-def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
-    """Export with original report data included with robust NaN/None handling"""
+def export_results_to_excel(processed_data: Dict[str, Any], progress_callback=None) -> io.BytesIO:
+    """Export with original report data included with robust NaN/None handling and enhanced remediation per CVE"""
     output = io.BytesIO()
 
     try:
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
             # Enhanced detailed results with original data
             detailed_rows = []
+            
+            # Calculate total items for progress tracking
+            total_items = 0
+            for result in processed_data.get("results", []):
+                cve_results = result.get("cve_results", [])
+                total_items += len(cve_results) if cve_results else 1
+            
+            processed_items = 0
 
             for result in processed_data.get("results", []):
                 try:
@@ -235,12 +70,6 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                         "Vulnerability Category": "",
                         "SLA Status": determine_sla_status(severity_score, vulnerability_age),
                         "Remediation Marks": "",
-                        "Avg CVSS Score": round(
-                            float(clean_value(result.get("avg_cvss_score"), "0") or "0"), 2
-                        ),
-                        "Highest CVSS Score": round(
-                            float(clean_value(result.get("highest_score"), "0") or "0"), 2
-                        ),
                     }
 
                     cve_results = result.get("cve_results", [])
@@ -254,16 +83,6 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                             except (ValueError, TypeError):
                                 cve_score = 0.0
                             
-                            # Handle CWE info safely
-                            cwe_info = getattr(cve, "cwe_info", []) or []
-                            if isinstance(cwe_info, list):
-                                cwe_string = ", ".join(
-                                    str(item) for item in cwe_info 
-                                    if item is not None and not is_nan(item)
-                                )
-                            else:
-                                cwe_string = clean_value(cwe_info)
-                            
                             # Handle affected products safely  
                             affected_products = getattr(cve, "affected_products", []) or []
                             if isinstance(affected_products, list):
@@ -273,6 +92,13 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                 )
                             else:
                                 products_string = clean_value(affected_products)
+                            
+                            # Update progress
+                            if progress_callback:
+                                progress_callback(processed_items, total_items, f"Generating remediation for CVE: {getattr(cve, 'cve_id', 'Unknown')}")
+                            
+                            # Get enhanced remediation data for THIS specific CVE
+                            remediation_data = asyncio.run(get_enhanced_remediation_data(result, cve))
                             
                             row.update({
                                 "CVE": clean_value(getattr(cve, "cve_id", "")),
@@ -288,11 +114,29 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                 "CVE_Severity": clean_value(getattr(cve, "severity", "")),
                                 "CVE_Description": clean_value(getattr(cve, "description", "")),
                                 "CVE_Vector_String": clean_value(getattr(cve, "vector_string", "")),
-                                "CVE_CWE_Info": cwe_string,
                                 "CVE_Affected_Products": products_string,
+                                # Enhanced remediation columns for THIS CVE
+                                "Remediation Guide": remediation_data.get("Remediation Guide", ""),
+                                "Remediation Priority": remediation_data.get("Remediation Priority", ""),
+                                "Estimated Effort": remediation_data.get("Estimated Effort", ""),
+                                "Reference Links": remediation_data.get("Reference Links", ""),
+                                "Additional Resources": remediation_data.get("Additional Resources", ""),
+                                "Immediate Actions": remediation_data.get("Immediate Actions", ""),
+                                "Detailed Steps": remediation_data.get("Detailed Steps", ""),
+                                "Verification Steps": remediation_data.get("Verification Steps", ""),
+                                "Rollback Plan": remediation_data.get("Rollback Plan", ""),
                             })
                             detailed_rows.append(row)
+                            
+                            processed_items += 1
+                            if progress_callback:
+                                progress_callback(processed_items, total_items, f"Completed CVE: {getattr(cve, 'cve_id', 'Unknown')}")
+                            
                     else:
+                        # Update progress for rows without CVEs
+                        if progress_callback:
+                            progress_callback(processed_items, total_items, f"Processing vulnerability: {clean_value(original_data.get('Title'))}")
+                        
                         # Add base row even if no CVEs found
                         base_row.update({
                             "CVE": "",
@@ -306,8 +150,21 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                             "CVE_Vector_String": "",
                             "CVE_CWE_Info": "",
                             "CVE_Affected_Products": "",
+                            "Remediation Guide": "",
+                            "Remediation Priority": "",
+                            "Estimated Effort": "",
+                            "Reference Links": "",
+                            "Additional Resources": "",
+                            "Immediate Actions": "",
+                            "Detailed Steps": "",
+                            "Verification Steps": "",
+                            "Rollback Plan": "",
                         })
                         detailed_rows.append(base_row)
+                        
+                        processed_items += 1
+                        if progress_callback:
+                            progress_callback(processed_items, total_items, f"Completed vulnerability: {clean_value(original_data.get('Title'))}")
                         
                 except Exception as e:
                     print(f"Error processing result: {e}")
@@ -317,7 +174,15 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                         "Error": f"Processing error: {str(e)}"
                     }
                     detailed_rows.append(error_row)
+                    
+                    processed_items += 1
+                    if progress_callback:
+                        progress_callback(processed_items, total_items, f"Error processing: {str(e)}")
 
+            # Update progress for DataFrame creation
+            if progress_callback:
+                progress_callback(total_items, total_items, "Creating Excel workbook...")
+            
             # Convert to DataFrame and clean any remaining NaN values
             if detailed_rows:
                 df = pd.DataFrame(detailed_rows)
@@ -329,13 +194,24 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                     df[col] = df[col].astype(str).replace(['nan', 'None', 'NaT'], '')
                 
                 df.to_excel(writer, sheet_name="Complete_Analysis", index=False)
+                
+                # Create a summary sheet for remediation priorities
+                if 'Remediation Priority' in df.columns:
+                    priority_summary = df.groupby(['Remediation Priority', 'Severity']).size().reset_index(name='Count')
+                    priority_summary.to_excel(writer, sheet_name="Remediation_Summary", index=False)
+                
             else:
                 # Create empty DataFrame if no data
                 empty_df = pd.DataFrame([{"Message": "No data to export"}])
                 empty_df.to_excel(writer, sheet_name="Complete_Analysis", index=False)
+                
+            if progress_callback:
+                progress_callback(total_items, total_items, "Excel export completed!")
 
     except Exception as e:
         print(f"Error in export_results_to_excel: {e}")
+        if progress_callback:
+            progress_callback(total_items, total_items, f"Export failed: {str(e)}")
         # Create a basic error report
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:

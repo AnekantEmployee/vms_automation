@@ -1,11 +1,11 @@
 import time
 import pandas as pd
 import streamlit as st
-from typing import Dict, Any, List, Tuple
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from cve_core import CVESearchAgent, combined_cve_search
+from typing import Dict, Any, Tuple
+from utils.core_functions import combined_cve_search
 from utils.export_excel import export_results_to_excel
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Page configuration
 st.set_page_config(
@@ -37,6 +37,11 @@ st.markdown(
     .severity-medium { background: #fff8e1 !important; color: #f57f17 !important; padding: 0.25rem 0.75rem; border-radius: 15px; font-weight: bold; font-size: 0.8rem; }
     .severity-low { background: #e8f5e8 !important; color: #2e7d32 !important; padding: 0.25rem 0.75rem; border-radius: 15px; font-weight: bold; font-size: 0.8rem; }
     .severity-unknown { background: #f5f5f5 !important; color: #666 !important; padding: 0.25rem 0.75rem; border-radius: 15px; font-weight: bold; font-size: 0.8rem; }
+    .chat-processing { 
+        background: #fff3e0; 
+        color: #ef6c00; 
+        border-left: 4px solid #ff9800; 
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -77,11 +82,6 @@ class ChatInterface:
     @staticmethod
     def clear_chat():
         st.session_state.chat_messages = []
-
-
-@st.cache_resource
-def initialize_agent():
-    return CVESearchAgent()
 
 
 def read_uploaded_file(uploaded_file) -> pd.DataFrame:
@@ -146,9 +146,6 @@ def process_single_vulnerability(
                 "type": vuln_type,
                 "cve_count": len(cve_results),
                 "cve_results": cve_results,
-                "severity_summary": severity_counts,
-                "avg_cvss_score": total_score / score_count if score_count > 0 else 0,
-                "highest_score": max(cve.score for cve in cve_results),
                 "processed_at": datetime.now().isoformat(),
             }
             return result, "success"
@@ -160,9 +157,6 @@ def process_single_vulnerability(
                 "type": vuln_type,
                 "cve_count": 0,
                 "cve_results": [],
-                "severity_summary": {},
-                "avg_cvss_score": 0,
-                "highest_score": 0,
                 "processed_at": datetime.now().isoformat(),
             }
             return result, "success_no_cves"
@@ -383,13 +377,6 @@ def main():
             """
         )
 
-    # Initialize agent
-    try:
-        agent = initialize_agent()
-    except ValueError as e:
-        st.error(f"⚠️ {e}")
-        st.stop()
-
     # File upload
     st.subheader("📤 Upload Vulnerability Report")
     uploaded_file = st.file_uploader(
@@ -441,7 +428,7 @@ def main():
         st.subheader("💬 Processing Chat")
         ChatInterface.display_chat()
 
-    # Display results (unchanged from original)
+    # Display results
     if st.session_state.processed_data:
         st.divider()
         st.subheader("📋 Results Summary")
@@ -454,9 +441,7 @@ def main():
         with col2:
             st.metric("CVEs Found", data["summary"]["total_cves_found"])
         with col3:
-            vulnerabilities_with_cves = sum(
-                1 for r in data["results"] if r["cve_count"] > 0
-            )
+            vulnerabilities_with_cves = sum(1 for r in data["results"] if r["cve_count"] > 0)
             st.metric("Vulns with CVEs", vulnerabilities_with_cves)
         with col4:
             avg_cves = data["summary"]["total_cves_found"] / max(
@@ -478,7 +463,50 @@ def main():
         with col2:
             if is_generated_report:
                 try:
-                    excel_file = export_results_to_excel(data)
+                    # Add this function to your Streamlit app
+                    def export_with_progress(processed_data):
+                        """Export data with progress tracking"""
+                        
+                        # Create progress elements
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        chat_placeholder = st.empty()
+                        
+                        def progress_callback(current, total, message):
+                            # Update progress bar
+                            if total > 0:
+                                progress_bar.progress(current / total)
+                            
+                            # Update status text
+                            status_text.text(f"{current}/{total} - {message}")
+                            
+                            # Add to chat
+                            ChatInterface.add_message(f"📊 {message}", "processing")
+                            
+                            # Update chat display
+                            with chat_placeholder.container():
+                                ChatInterface.display_chat()
+                        
+                        try:
+                            # Start export with progress tracking
+                            ChatInterface.add_message("📤 Starting Excel export with remediation data...", "system")
+                            
+                            excel_file = export_results_to_excel(processed_data, progress_callback)
+                            
+                            ChatInterface.add_message("✅ Excel export completed successfully!", "success")
+                            
+                            return excel_file
+                            
+                        except Exception as e:
+                            ChatInterface.add_message(f"❌ Export failed: {str(e)}", "error")
+                            raise e
+                        finally:
+                            # Clear progress elements
+                            progress_bar.empty()
+                            status_text.empty()
+
+                    excel_file = export_with_progress(data)
+
                     st.download_button(
                         label="⬇️ Download Report",
                         data=excel_file,
