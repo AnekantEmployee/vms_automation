@@ -1,4 +1,5 @@
 import time
+import asyncio
 import pandas as pd
 import streamlit as st
 from datetime import datetime
@@ -6,6 +7,7 @@ from typing import Dict, Any, Tuple
 from utils.core_functions import combined_cve_search
 from utils.export_excel import export_results_to_excel
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from utils.remediation_agent import get_enhanced_remediation_data
 
 # Page configuration
 st.set_page_config(
@@ -102,7 +104,6 @@ def find_header_row(df: pd.DataFrame) -> int:
             return idx
     return -1
 
-
 def process_single_vulnerability(
     idx: int,
     row: pd.Series,
@@ -111,54 +112,55 @@ def process_single_vulnerability(
     header_row: int,
     max_results_per_vuln: int,
 ) -> Tuple[Dict[str, Any], str]:
-    """Process a single vulnerability row (worker function for parallel processing)"""
     title = str(row.get(title_col, "")).strip()
     vuln_type = str(row.get(type_col, "")).strip() if type_col else "Unknown"
 
     if not title or title == "nan":
         return None, "skipped_empty"
 
-    # Skip if type column exists and doesn't contain "vuln" or "ig" (case-insensitive)
     if type_col and not any(keyword in vuln_type.lower() for keyword in ["vuln", "ig"]):
         return None, "skipped_type"
 
     try:
         cve_results = combined_cve_search(title, max_results_per_vuln)
-
-        # Create original row data dictionary (all columns from original report)
         original_data = {col: str(row.get(col, "")) for col in row.index}
 
-        if cve_results:
-            severity_counts = {}
-            total_score = score_count = 0
+        # ⬇️ Add remediation per CVE at processing time
+        enriched_cves = []
+        for cve in cve_results:
+            try:
+                # Use our new, safe helper function
+                remediation_data = run_async_in_thread(
+                    get_enhanced_remediation_data(original_data, cve)
+                )
+            except Exception as e:
+                remediation_data = {"Error": str(e)}
 
-            for cve in cve_results:
-                severity = cve.severity.upper()
-                severity_counts[severity] = severity_counts.get(severity, 0) + 1
-                if cve.score > 0:
-                    total_score += cve.score
-                    score_count += 1
+            enriched_cves.append({
+                "cve_id": cve.cve_id,
+                "score": cve.score,
+                "severity": cve.severity,
+                "description": cve.description,
+                "vector_string": getattr(cve, "vector_string", ""),
+                "affected_products": getattr(cve, "affected_products", []),
+                "published_date": getattr(cve, "published_date", ""),
+                "modified_date": getattr(cve, "modified_date", ""),
+                # 🎯 Store remediation alongside
+                "remediation": remediation_data
+            })
 
-            result = {
-                "original_row": idx + header_row + 2,  # +2 for 0-based index + header
-                "original_data": original_data,
-                "title": title,
-                "type": vuln_type,
-                "cve_count": len(cve_results),
-                "cve_results": cve_results,
-                "processed_at": datetime.now().isoformat(),
-            }
+        result = {
+            "original_row": idx + header_row + 2,
+            "original_data": original_data,
+            "title": title,
+            "type": vuln_type,
+            "cve_count": len(enriched_cves),
+            "cve_results": enriched_cves,   # Already carries remediation
+            "processed_at": datetime.now().isoformat(),
+        }
+        if enriched_cves:
             return result, "success"
         else:
-            result = {
-                "original_row": idx + header_row + 2,
-                "original_data": original_data,
-                "title": title,
-                "type": vuln_type,
-                "cve_count": 0,
-                "cve_results": [],
-                "processed_at": datetime.now().isoformat(),
-            }
             return result, "success_no_cves"
 
     except Exception as e:
@@ -171,7 +173,6 @@ def process_single_vulnerability(
             "processed_at": datetime.now().isoformat(),
         }
         return error_result, "error"
-
 
 def process_vulnerability_report(
     df: pd.DataFrame, max_results_per_vuln: int = 3, max_workers: int = 5
@@ -300,6 +301,21 @@ def process_vulnerability_report(
         },
     }
 
+def run_async_in_thread(coro):
+    """
+    Safely runs an async coroutine in a synchronous thread by managing
+    its own event loop.
+    """
+    # Create a new event loop
+    loop = asyncio.new_event_loop()
+    # Set it as the current event loop for this thread
+    asyncio.set_event_loop(loop)
+    try:
+        # Run the coroutine until it completes
+        return loop.run_until_complete(coro)
+    finally:
+        # Ensure the loop is closed
+        loop.close()
 
 def main():
     """Streamlined main application"""

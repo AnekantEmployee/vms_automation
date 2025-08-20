@@ -395,6 +395,7 @@ async def get_enhanced_remediation_data(result: Dict[str, Any], cve: Any = None)
     try:
         # Prepare vulnerability data
         original_data = result.get("original_data", {})
+        
         vulnerability_data = {
             "title": clean_value(original_data.get("Title")),
             "qid": clean_value(original_data.get("QID")),
