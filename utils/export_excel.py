@@ -1,8 +1,7 @@
 import io
-import asyncio
 import pandas as pd
 from typing import Dict, Any
-from .remediation_agent import get_enhanced_remediation_data
+import streamlit as st
 from .export_utils import determine_severity_score, get_days_diff, is_nan, clean_value, simplify_date, determine_sla_status
 
 def export_results_to_excel(processed_data: Dict[str, Any], progress_callback=None) -> io.BytesIO:
@@ -77,14 +76,45 @@ def export_results_to_excel(processed_data: Dict[str, Any], progress_callback=No
                         for i, cve in enumerate(cve_results, 1):
                             row = base_row.copy()
                             
+                            print(f"CVE structure: {type(cve)} - {cve}")
+                            
                             # Safely extract CVE attributes from dictionary
+                            st.write(cve)
                             try:
-                                cve_score = float(clean_value(cve.get("score", "0") or "0"))
+                                if isinstance(cve, dict):
+                                    cve_score = float(clean_value(cve.get("score", "0") or "0"))
+                                    cve_id = clean_value(cve.get("cve_id", ""))
+                                    published_date = clean_value(cve.get("published_date", ""))
+                                    modified_date = clean_value(cve.get("modified_date", ""))
+                                    severity = clean_value(cve.get("severity", ""))
+                                    description = clean_value(cve.get("description", ""))
+                                    vector_string = clean_value(cve.get("vector_string", ""))
+                                    affected_products = cve.get("affected_products", []) or []
+                                    remediation_data = cve.get("remediation", {}) or {}
+                                else:
+                                    # Handle object format (fallback)
+                                    cve_score = float(clean_value(getattr(cve, "score", "0") or "0"))
+                                    cve_id = clean_value(getattr(cve, "cve_id", ""))
+                                    published_date = clean_value(getattr(cve, "published_date", ""))
+                                    modified_date = clean_value(getattr(cve, "modified_date", ""))
+                                    severity = clean_value(getattr(cve, "severity", ""))
+                                    description = clean_value(getattr(cve, "description", ""))
+                                    vector_string = clean_value(getattr(cve, "vector_string", ""))
+                                    affected_products = getattr(cve, "affected_products", []) or []
+                                    remediation_data = getattr(cve, "remediation", {}) or {}
                             except (ValueError, TypeError):
+                                print(f"Error extracting CVE data: {e}")
                                 cve_score = 0.0
+                                cve_id = ""
+                                published_date = ""
+                                modified_date = ""
+                                severity = ""
+                                description = ""
+                                vector_string = ""
+                                affected_products = []
+                                remediation_data = {}
                             
                             # Handle affected products safely  
-                            affected_products = cve.get("affected_products", []) or []
                             if isinstance(affected_products, list):
                                 products_string = ", ".join(
                                     str(item) for item in affected_products[:5]
@@ -93,23 +123,24 @@ def export_results_to_excel(processed_data: Dict[str, Any], progress_callback=No
                             else:
                                 products_string = clean_value(affected_products)
                             
-                            # Get remediation data
-                            remediation_data = cve.get("remediation", {})
+                            # Ensure remediation_data is a dictionary
+                            if not isinstance(remediation_data, dict):
+                                remediation_data = {}
                             
                             # Update progress
                             if progress_callback:
-                                progress_callback(processed_items, total_items, f"Processing CVE: {cve.get('cve_id', 'Unknown')}")
+                                progress_callback(processed_items, total_items, f"Processing CVE: {cve_id}")
                             
                             row.update({
-                                "CVE": clean_value(cve.get("cve_id", "")),
-                                "Published Date": clean_value(cve.get("published_date", "")),
-                                "Patch Released": clean_value(cve.get("modified_date", "")),
+                                "CVE": cve_id,
+                                "Published Date": published_date,
+                                "Patch Released": modified_date,
                                 "Asset Critical Score": severity_score,
                                 "Severity Score": severity_score,
                                 "CVE_CVSS_Score": cve_score,
-                                "CVE_Severity": clean_value(cve.get("severity", "")),
-                                "CVE_Description": clean_value(cve.get("description", "")),
-                                "CVE_Vector_String": clean_value(cve.get("vector_string", "")),
+                                "CVE_Severity": severity,
+                                "CVE_Description": description,
+                                "CVE_Vector_String": vector_string,
                                 "CVE_CWE_Info": "",
                                 "CVE_Affected_Products": products_string,
                                 "Remediation Guide": remediation_data.get("Remediation Guide", ""),
@@ -127,7 +158,7 @@ def export_results_to_excel(processed_data: Dict[str, Any], progress_callback=No
                             
                             processed_items += 1
                             if progress_callback:
-                                progress_callback(processed_items, total_items, f"Completed CVE: {cve.get('cve_id', 'Unknown')}")
+                                progress_callback(processed_items, total_items, f"Completed CVE: {cve_id}")
                             
                     else:
                         # Update progress for rows without CVEs
@@ -164,6 +195,76 @@ def export_results_to_excel(processed_data: Dict[str, Any], progress_callback=No
                             progress_callback(processed_items, total_items, f"Completed vulnerability: {clean_value(original_data.get('Title'))}")
                         
                 except Exception as e:
+                    print(f"Error processing result: {e}")
+                    # Add a minimal error row to avoid losing data
+                    error_row = base_row.copy()
+                    error_row.update({
+                        "Title": clean_value(result.get("title", "Error processing row")),
+                        "Error": f"Processing error: {str(e)}",
+                        # Add empty CVE fields to maintain structure
+                        "CVE": "",
+                        "Published Date": "",
+                        "Patch Released": "",
+                        "Asset Critical Score": severity_score,
+                        "Severity Score": severity_score,
+                        "CVE_CVSS_Score": 0.0,
+                        "CVE_Severity": "",
+                        "CVE_Description": "",
+                        "CVE_Vector_String": "",
+                        "CVE_CWE_Info": "",
+                        "CVE_Affected_Products": "",
+                        "Remediation Guide": "",
+                        "Remediation Priority": "",
+                        "Estimated Effort": "",
+                        "Reference Links": "",
+                        "Additional Resources": "",
+                        "Immediate Actions": "",
+                        "Detailed Steps": "",
+                        "Verification Steps": "",
+                        "Rollback Plan": "",
+                    })
+                    detailed_rows.append(error_row)
+                    
+                    processed_items += 1
+                    if progress_callback:
+                        progress_callback(processed_items, total_items, f"Error processing: {str(e)}")
+                            
+                    else:
+                        # Update progress for rows without CVEs
+                        if progress_callback:
+                            progress_callback(processed_items, total_items, f"Processing vulnerability: {clean_value(original_data.get('Title'))}")
+                        
+                        # Add base row even if no CVEs found
+                        base_row.update({
+                            "CVE": "",
+                            "Published Date": "",
+                            "Patch Released": "",
+                            "Asset Critical Score": severity_score,
+                            "Severity Score": severity_score,
+                            "CVE_CVSS_Score": 0.0,
+                            "CVE_Severity": "",
+                            "CVE_Description": "",
+                            "CVE_Vector_String": "",
+                            "CVE_CWE_Info": "",
+                            "CVE_Affected_Products": "",
+                            "Remediation Guide": "",
+                            "Remediation Priority": "",
+                            "Estimated Effort": "",
+                            "Reference Links": "",
+                            "Additional Resources": "",
+                            "Immediate Actions": "",
+                            "Detailed Steps": "",
+                            "Verification Steps": "",
+                            "Rollback Plan": "",
+                        })
+                        detailed_rows.append(base_row)
+                        
+                        processed_items += 1
+                        if progress_callback:
+                            progress_callback(processed_items, total_items, f"Completed vulnerability: {clean_value(original_data.get('Title'))}")
+                        
+                except Exception as e:
+                    print("Here", e)
                     print(f"Error processing result: {e}")
                     # Add a minimal error row to avoid losing data
                     error_row = {

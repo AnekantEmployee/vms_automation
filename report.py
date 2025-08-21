@@ -50,9 +50,14 @@ st.markdown(
 )
 
 # Initialize session state
-for key in ["chat_messages", "processed_data"]:
+for key in ["chat_messages", "processed_data", "progress_bar", "status_text"]:
     if key not in st.session_state:
-        st.session_state[key] = [] if key == "chat_messages" else None
+        if key == "chat_messages":
+            st.session_state[key] = []
+        elif key in ["progress_bar", "status_text"]:
+            st.session_state[key] = None
+        else:
+            st.session_state[key] = None
 
 
 class ChatInterface:
@@ -128,12 +133,13 @@ def process_single_vulnerability(
         # ⬇️ Add remediation per CVE at processing time
         enriched_cves = []
         for cve in cve_results:
+            # Use our new, safe helper function
             try:
-                # Use our new, safe helper function
                 remediation_data = run_async_in_thread(
                     get_enhanced_remediation_data(original_data, cve)
                 )
             except Exception as e:
+                print(f"Error getting remediation data: {e}")
                 remediation_data = {"Error": str(e)}
 
             enriched_cves.append({
@@ -173,6 +179,13 @@ def process_single_vulnerability(
             "processed_at": datetime.now().isoformat(),
         }
         return error_result, "error"
+
+def update_progress(progress, message):
+    """Update the main progress bar and status text"""
+    if st.session_state.progress_bar:
+        st.session_state.progress_bar.progress(progress)
+    if st.session_state.status_text:
+        st.session_state.status_text.text(message)
 
 def process_vulnerability_report(
     df: pd.DataFrame, max_results_per_vuln: int = 3, max_workers: int = 5
@@ -216,9 +229,9 @@ def process_vulnerability_report(
         "error": 0,
     }
 
-    progress_placeholder = st.empty()
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    # Initialize progress elements
+    st.session_state.progress_bar = st.progress(0)
+    st.session_state.status_text = st.empty()
 
     # Initialize chat placeholder for real-time updates
     if "chat_placeholder" not in st.session_state:
@@ -267,8 +280,8 @@ def process_vulnerability_report(
 
             # Update progress
             progress = (i + 1) / len(futures)
-            progress_bar.progress(progress)
-            status_text.text(
+            update_progress(
+                progress,
                 f"Processed: {i+1}/{len(futures)} | "
                 f"CVEs Found: {sum(len(r['cve_results']) for r in results if 'cve_results' in r)} | "
                 f"Errors: {stats['error']}"
@@ -306,16 +319,75 @@ def run_async_in_thread(coro):
     Safely runs an async coroutine in a synchronous thread by managing
     its own event loop.
     """
-    # Create a new event loop
-    loop = asyncio.new_event_loop()
-    # Set it as the current event loop for this thread
-    asyncio.set_event_loop(loop)
+    import asyncio
+    import threading
+    
+    def run_in_thread():
+        """Run coroutine in a separate thread with its own event loop"""
+        try:
+            # Create a new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            # Run the coroutine
+            result = loop.run_until_complete(coro)
+            return result
+        except Exception as e:
+            print(f"Error in async thread: {e}")
+            return {"Error": str(e)}
+        finally:
+            # Clean up the loop
+            loop.close()
+    
+    # If we're in a Streamlit environment, run in a separate thread
     try:
-        # Run the coroutine until it completes
-        return loop.run_until_complete(coro)
-    finally:
-        # Ensure the loop is closed
-        loop.close()
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(run_in_thread)
+            return future.result(timeout=30)  # 30 second timeout
+    except Exception as e:
+        print(f"Thread execution error: {e}")
+        return {
+            "Remediation Guide": "Manual remediation required - async processing failed",
+            "Remediation Priority": "Medium",
+            "Estimated Effort": "Manual assessment needed",
+            "Reference Links": "",
+            "Additional Resources": "https://nvd.nist.gov/",
+            "Immediate Actions": "• Isolate affected systems\n• Check vendor advisories",
+            "Detailed Steps": "1. Consult vendor documentation\n2. Apply recommended patches",
+            "Verification Steps": "• Verify patch installation\n• Test system functionality",
+            "Rollback Plan": "• Maintain system backups\n• Test rollback procedure",
+        }
+
+def export_with_progress(processed_data):
+    """Export data with progress tracking using the main progress display"""
+    
+    # Start export with progress tracking
+    ChatInterface.add_message("📤 Starting Excel export with remediation data...", "system")
+    
+    def progress_callback(current, total, message):
+        # Update progress bar
+        if total > 0:
+            update_progress(current / total, message)
+        
+        # Add to chat
+        ChatInterface.add_message(f"📊 {message}", "processing")
+        
+        # Update chat display
+        with st.session_state.chat_placeholder.container():
+            ChatInterface.display_chat()
+    
+    try:
+        # Start export with progress tracking
+        excel_file = export_results_to_excel(processed_data, progress_callback)
+        
+        ChatInterface.add_message("✅ Excel export completed successfully!", "success")
+        
+        return excel_file
+        
+    except Exception as e:
+        ChatInterface.add_message(f"❌ Export failed: {str(e)}", "error")
+        raise e
 
 def main():
     """Streamlined main application"""
@@ -479,48 +551,6 @@ def main():
         with col2:
             if is_generated_report:
                 try:
-                    # Add this function to your Streamlit app
-                    def export_with_progress(processed_data):
-                        """Export data with progress tracking"""
-                        
-                        # Create progress elements
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        chat_placeholder = st.empty()
-                        
-                        def progress_callback(current, total, message):
-                            # Update progress bar
-                            if total > 0:
-                                progress_bar.progress(current / total)
-                            
-                            # Update status text
-                            status_text.text(f"{current}/{total} - {message}")
-                            
-                            # Add to chat
-                            ChatInterface.add_message(f"📊 {message}", "processing")
-                            
-                            # Update chat display
-                            with chat_placeholder.container():
-                                ChatInterface.display_chat()
-                        
-                        try:
-                            # Start export with progress tracking
-                            ChatInterface.add_message("📤 Starting Excel export with remediation data...", "system")
-                            
-                            excel_file = export_results_to_excel(processed_data, progress_callback)
-                            
-                            ChatInterface.add_message("✅ Excel export completed successfully!", "success")
-                            
-                            return excel_file
-                            
-                        except Exception as e:
-                            ChatInterface.add_message(f"❌ Export failed: {str(e)}", "error")
-                            raise e
-                        finally:
-                            # Clear progress elements
-                            progress_bar.empty()
-                            status_text.empty()
-
                     excel_file = export_with_progress(data)
 
                     st.download_button(

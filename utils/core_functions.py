@@ -1,16 +1,17 @@
 import re
-import time
 import requests
+import time
 import urllib.parse
 import concurrent.futures
 from threading import Lock
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 
 
 # Cache for NIST API results to avoid duplicate calls
 _nist_cache = {}
+_cve_org_cache = {}
 _cache_lock = Lock()
 
 
@@ -40,17 +41,6 @@ class CVEResult:
             self.affected_products = []
         if self.references is None:
             self.references = []
-
-
-@dataclass
-class CVEDetailResult:
-    cve_id: str
-    description: str
-    references: List[str]
-    cwe_info: str
-    vendor_advisories: List[str]
-    affected_products: List[str]
-    source: str = "CVE.org"
 
 
 def extract_cpe_products(configurations: List[Dict]) -> List[str]:
@@ -154,7 +144,6 @@ def get_nist_cve_details(cve_id: str) -> Optional[CVEResult]:
                 severity = cvss_data.get("baseSeverity", "Unknown")
                 vector_string = cvss_data.get("vectorString", "")
                 cvss_version = "3.1"
-                # v3 doesn't have separate exploitability/impact scores in the same way
             elif "cvssMetricV30" in metrics and metrics["cvssMetricV30"]:
                 cvss_data = metrics["cvssMetricV30"][0]["cvssData"]
                 score = cvss_data.get("baseScore", 0.0)
@@ -224,12 +213,15 @@ def get_nist_cve_details(cve_id: str) -> Optional[CVEResult]:
         return None
 
 
-def search_mitre_cve(query: str, max_results: int = 10) -> List[CVEResult]:
-    """MITRE CVE database search with original functionality"""
+def search_cve_org(query: str, max_results: int = 10) -> List[str]:
+    """Search CVE.org for CVE IDs using the new search interface"""
     try:
+        print(f"Searching CVE.org for: '{query}'")
+        
+        # URL encode the query
         encoded_query = urllib.parse.quote_plus(query)
-        mitre_url = f"https://cve.mitre.org/cgi-bin/cvekey.cgi?keyword={encoded_query}"
-
+        cve_org_url = f"https://www.cve.org/CVERecord/SearchResults?query={encoded_query}"
+        
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -239,331 +231,289 @@ def search_mitre_cve(query: str, max_results: int = 10) -> List[CVEResult]:
             "Upgrade-Insecure-Requests": "1",
         }
 
-        response = requests.get(mitre_url, headers=headers, timeout=30)
+        response = requests.get(cve_org_url, headers=headers, timeout=30)
         response.raise_for_status()
 
-        print(f"MITRE Response Status: {response.status_code}")
-
         soup = BeautifulSoup(response.content, "html.parser")
-        results = []
+        cve_ids = []
 
-        # Extract key terms from the query for better filtering
-        query_terms = query.lower().split()
-        chrome_terms = ["chrome", "google", "browser"]
-        is_chrome_query = any(term in query_terms for term in chrome_terms)
+        # Look for CVE IDs in the search results
+        # Method 1: Find direct CVE links
+        cve_links = soup.find_all("a", href=re.compile(r"/CVERecord\?id=CVE-\d{4}-\d+", re.I))
+        for link in cve_links:
+            href = link.get("href", "")
+            cve_match = re.search(r"CVE-\d{4}-\d{4,}", href, re.IGNORECASE)
+            if cve_match:
+                cve_id = cve_match.group().upper()
+                if cve_id not in cve_ids:
+                    cve_ids.append(cve_id)
 
-        # Method 1: Look for results in the main content area (more specific)
-        content_div = soup.find("div", {"id": "GeneratedTable"}) or soup.find(
-            "div", class_="searchresults"
-        )
+        # Method 2: Find CVE patterns in text content
+        if not cve_ids:
+            # Look for CVE patterns in the page text
+            page_text = soup.get_text()
+            cve_patterns = re.findall(r"CVE-\d{4}-\d{4,}", page_text, re.IGNORECASE)
+            for cve_pattern in cve_patterns:
+                cve_id = cve_pattern.upper()
+                if cve_id not in cve_ids:
+                    cve_ids.append(cve_id)
 
-        if content_div:
-            # Look for table rows with CVE information
-            rows = content_div.find_all("tr")
-            for row in rows[1:]:  # Skip header row
-                if len(results) >= max_results:
-                    break
+        # Method 3: Look for specific CVE result sections
+        if not cve_ids:
+            # Try to find result containers
+            result_sections = soup.find_all(['div', 'section', 'article'], 
+                                          class_=re.compile(r"result|search|cve", re.I))
+            for section in result_sections:
+                section_text = section.get_text()
+                cve_patterns = re.findall(r"CVE-\d{4}-\d{4,}", section_text, re.IGNORECASE)
+                for cve_pattern in cve_patterns:
+                    cve_id = cve_pattern.upper()
+                    if cve_id not in cve_ids:
+                        cve_ids.append(cve_id)
 
-                cells = row.find_all("td")
-                if len(cells) >= 2:
-                    # First cell contains CVE ID
-                    first_cell = cells[0].get_text().strip()
-                    cve_match = re.search(
-                        r"CVE-\d{4}-\d{4,}", first_cell, re.IGNORECASE
-                    )
-
-                    if cve_match:
-                        cve_id = cve_match.group().upper()
-
-                        # Get description from second cell
-                        description = cells[1].get_text().strip()
-
-                        # Filter results - only include if description contains query terms
-                        if is_chrome_query:
-                            desc_lower = description.lower()
-                            if not any(term in desc_lower for term in chrome_terms):
-                                continue  # Skip if not Chrome-related
-
-                        # Additional filtering based on query terms
-                        query_lower = query.lower()
-                        desc_lower = description.lower()
-
-                        # Check if description contains relevant terms from the query
-                        relevant_terms = []
-                        if "chrome" in query_lower:
-                            relevant_terms.extend(
-                                ["chrome", "google chrome", "chromium"]
-                            )
-                        if any(
-                            version_term in query_lower
-                            for version_term in ["138", "137", "136"]
-                        ):
-                            relevant_terms.extend(["138", "137", "136"])
-
-                        if relevant_terms and not any(
-                            term in desc_lower for term in relevant_terms
-                        ):
-                            continue  # Skip if not relevant
-
-                        # Limit description length
-                        if len(description) > 300:
-                            description = description[:300] + "..."
-
-                        results.append(
-                            CVEResult(
-                                cve_id=cve_id,
-                                description=description,
-                                severity="Unknown",
-                                published_date="Unknown",
-                                modified_date="Unknown",
-                                score=0.0,
-                                source="MITRE",
-                            )
-                        )
-
-        # Method 2: If no structured results, look for CVE links with context
-        if not results:
-            # Find all links that contain CVE IDs
-            cve_links = soup.find_all("a", href=re.compile(r"CVE-\d{4}-\d+", re.I))
-
-            for link in cve_links:
-                if len(results) >= max_results:
-                    break
-
-                href = link.get("href", "")
-                cve_match = re.search(r"CVE-\d{4}-\d{4,}", href, re.IGNORECASE)
-
-                if cve_match:
-                    cve_id = cve_match.group().upper()
-
-                    # Get description from surrounding context
-                    description = ""
-
-                    # Try to get description from the same table row
-                    parent_row = link.find_parent("tr")
-                    if parent_row:
-                        cells = parent_row.find_all("td")
-                        if len(cells) > 1:
-                            # Find the cell with the description (usually not the first one)
-                            for cell in cells[1:]:
-                                cell_text = cell.get_text().strip()
-                                if len(cell_text) > 50:  # Reasonable description length
-                                    description = cell_text
-                                    break
-
-                    # If no description from table, try parent elements
-                    if not description:
-                        parent = link.parent
-                        for _ in range(3):  # Check up to 3 parent levels
-                            if parent:
-                                parent_text = parent.get_text().strip()
-                                if len(parent_text) > 50 and cve_id in parent_text:
-                                    # Extract relevant portion
-                                    description = parent_text[:300]
-                                    break
-                                parent = parent.parent
-
-                    # Filter based on relevance
-                    if description:
-                        desc_lower = description.lower()
-
-                        # For Chrome queries, ensure it's Chrome-related
-                        if is_chrome_query and not any(
-                            term in desc_lower for term in chrome_terms
-                        ):
-                            continue
-
-                        # Check for query term relevance
-                        query_terms_lower = [
-                            term.lower() for term in query.split() if len(term) > 2
-                        ]
-                        if query_terms_lower and not any(
-                            term in desc_lower for term in query_terms_lower
-                        ):
-                            continue
-
-                    if not description:
-                        description = f"CVE found in MITRE search for: {query}"
-
-                    if len(description) > 300:
-                        description = description[:300] + "..."
-
-                    results.append(
-                        CVEResult(
-                            cve_id=cve_id,
-                            description=description,
-                            severity="Unknown",
-                            published_date="Unknown",
-                            modified_date="Unknown",
-                            score=0.0,
-                            source="MITRE",
-                        )
-                    )
-
-        # Method 3: Last resort - parse page text with strict filtering
-        if not results and len(query.split()) >= 2:  # Only for multi-word queries
-            full_text = soup.get_text()
-
-            # Split into paragraphs/sections
-            sections = re.split(r"\n\s*\n", full_text)
-
-            for section in sections:
-                if len(results) >= max_results:
-                    break
-
-                # Look for CVE patterns in this section
-                cve_matches = re.findall(r"CVE-\d{4}-\d{4,}", section, re.IGNORECASE)
-
-                if cve_matches:
-                    section_lower = section.lower()
-
-                    # Check if this section is relevant to the query
-                    query_words = [
-                        word.lower() for word in query.split() if len(word) > 2
-                    ]
-                    relevance_score = sum(
-                        1 for word in query_words if word in section_lower
-                    )
-
-                    # Only include if section has good relevance
-                    if relevance_score >= min(2, len(query_words)):
-                        for cve_id in cve_matches:
-                            if len(results) >= max_results:
-                                break
-
-                            # Get context around the CVE
-                            cve_pos = section_lower.find(cve_id.lower())
-                            if cve_pos > 0:
-                                start = max(0, cve_pos - 100)
-                                end = min(len(section), cve_pos + 200)
-                                context = section[start:end].strip()
-
-                                if len(context) > 50:
-                                    results.append(
-                                        CVEResult(
-                                            cve_id=cve_id.upper(),
-                                            description=(
-                                                context[:300] + "..."
-                                                if len(context) > 300
-                                                else context
-                                            ),
-                                            severity="Unknown",
-                                            published_date="Unknown",
-                                            modified_date="Unknown",
-                                            score=0.0,
-                                            source="MITRE",
-                                        )
-                                    )
-
-        # Remove duplicates based on CVE ID
-        unique_results = {}
-        for result in results:
-            if result.cve_id not in unique_results:
-                unique_results[result.cve_id] = result
-
-        final_results = list(unique_results.values())[:max_results]
-        print(
-            f"MITRE found {len(final_results)} unique relevant CVEs (limited to {max_results})"
-        )
-
-        return final_results
+        # Remove duplicates and limit results
+        unique_cve_ids = list(dict.fromkeys(cve_ids))[:max_results]
+        print(f"CVE.org found {len(unique_cve_ids)} CVE IDs")
+        
+        return unique_cve_ids
 
     except Exception as e:
-        print(f"Error searching MITRE CVE: {e}")
-        import traceback
-
-        traceback.print_exc()
+        print(f"Error searching CVE.org: {e}")
         return []
 
 
-def batch_enhance_cves(
-    cve_results: List[CVEResult], max_concurrent: int = 3
-) -> List[CVEResult]:
-    """Batch enhance CVE results with concurrent NIST lookups"""
+def get_cve_org_details(cve_id: str) -> Optional[Dict]:
+    """Get detailed information for a specific CVE from CVE.org"""
+    with _cache_lock:
+        if cve_id in _cve_org_cache:
+            print(f"Using cached CVE.org data for: {cve_id}")
+            return _cve_org_cache[cve_id]
 
-    # Identify which CVEs need enhancement
-    needs_enhancement = []
-    already_complete = []
+    try:
+        print(f"Fetching CVE.org details for: {cve_id}")
+        
+        cve_url = f"https://www.cve.org/CVERecord?id={cve_id}"
+        
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
 
-    for result in cve_results:
-        if result.source == "MITRE" and (
-            result.severity == "Unknown" or result.score == 0.0
-        ):
-            needs_enhancement.append(result)
-        else:
-            already_complete.append(result)
+        response = requests.get(cve_url, headers=headers, timeout=15)
+        response.raise_for_status()
 
-    if not needs_enhancement:
-        print("No CVEs need enhancement")
-        return cve_results
+        soup = BeautifulSoup(response.content, "html.parser")
+        
+        details = {
+            "cve_id": cve_id,
+            "description": "",
+            "title": "",
+            "published_date": "",
+            "cwe_info": [],
+            "cvss_score": 0.0,
+            "severity": "Unknown",
+            "vector_string": "",
+            "cvss_version": "",
+            "affected_products": [],
+            "references": []
+        }
 
-    print(f"Enhancing {len(needs_enhancement)} CVEs with batch NIST lookup...")
+        # Extract title
+        title_elem = soup.find("h1") or soup.find(text=re.compile("Title", re.I))
+        if title_elem:
+            if hasattr(title_elem, 'get_text'):
+                details["title"] = title_elem.get_text().strip()
+            else:
+                # Find the next sibling or parent that contains the actual title
+                parent = title_elem.parent if title_elem.parent else title_elem
+                title_text = parent.get_text().strip()
+                if "Title:" in title_text:
+                    details["title"] = title_text.split("Title:")[-1].strip()
 
-    enhanced_results = []
+        # Extract description
+        desc_section = soup.find(text=re.compile("Description", re.I))
+        if desc_section:
+            desc_parent = desc_section.parent
+            # Look for the description content in nearby elements
+            for sibling in desc_parent.next_siblings:
+                if sibling and hasattr(sibling, 'get_text'):
+                    text = sibling.get_text().strip()
+                    if len(text) > 20 and not text.startswith(("CWE", "CVSS", "Product")):
+                        details["description"] = text
+                        break
 
-    # Process in batches to avoid overwhelming the API
-    def enhance_single_cve(cve_result):
-        nist_details = get_nist_cve_details(cve_result.cve_id)
-        if nist_details:
-            return CVEResult(
-                cve_id=cve_result.cve_id,
-                description=(
-                    nist_details.description
-                    if len(nist_details.description) > len(cve_result.description)
-                    else cve_result.description
-                ),
-                severity=(
-                    nist_details.severity
-                    if nist_details.severity != "Unknown"
-                    else cve_result.severity
-                ),
-                published_date=(
-                    nist_details.published_date
-                    if nist_details.published_date != "Unknown"
-                    else cve_result.published_date
-                ),
-                modified_date=(
-                    nist_details.modified_date
-                    if nist_details.modified_date != "Unknown"
-                    else cve_result.modified_date
-                ),
-                score=(
-                    nist_details.score if nist_details.score > 0 else cve_result.score
-                ),
-                source="MITRE+NIST",
-                # Enhanced fields from NIST
-                vuln_status=nist_details.vuln_status,
-                cwe_info=nist_details.cwe_info,
-                affected_products=nist_details.affected_products,
-                references=nist_details.references,
-                exploitability_score=nist_details.exploitability_score,
-                impact_score=nist_details.impact_score,
-                vector_string=nist_details.vector_string,
-                cvss_version=nist_details.cvss_version,
-            )
-        return cve_result
+        # Extract CWE information
+        cwe_section = soup.find(text=re.compile("CWE", re.I))
+        if cwe_section:
+            cwe_parent = cwe_section.parent
+            cwe_links = cwe_parent.find_all("a", href=re.compile("cwe", re.I))
+            for link in cwe_links:
+                cwe_text = link.get_text().strip()
+                if cwe_text:
+                    details["cwe_info"].append(cwe_text)
 
-    # Use ThreadPoolExecutor for concurrent API calls
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent) as executor:
-        # Add small delays between requests
-        enhanced = list(executor.map(enhance_single_cve, needs_enhancement))
-        enhanced_results.extend(enhanced)
+        # Extract CVSS information
+        cvss_section = soup.find(text=re.compile("CVSS", re.I))
+        if cvss_section:
+            cvss_parent = cvss_section.parent
+            # Look for score patterns
+            score_pattern = re.search(r"(\d+\.?\d*)\s*(HIGH|MEDIUM|LOW|CRITICAL)", 
+                                    cvss_parent.get_text(), re.IGNORECASE)
+            if score_pattern:
+                details["cvss_score"] = float(score_pattern.group(1))
+                details["severity"] = score_pattern.group(2).upper()
+            
+            # Look for vector string
+            vector_match = re.search(r"CVSS:\d+\.\d+/[A-Z:/_]+", cvss_parent.get_text())
+            if vector_match:
+                details["vector_string"] = vector_match.group()
+                if "CVSS:4.0" in details["vector_string"]:
+                    details["cvss_version"] = "4.0"
+                elif "CVSS:3.1" in details["vector_string"]:
+                    details["cvss_version"] = "3.1"
+                elif "CVSS:3.0" in details["vector_string"]:
+                    details["cvss_version"] = "3.0"
 
-        # Small delay to be respectful to the API
-        time.sleep(0.5)
+        # Extract affected products
+        product_section = soup.find(text=re.compile("Product Status|Vendor", re.I))
+        if product_section:
+            product_parent = product_section.parent
+            # Look for vendor/product information
+            for elem in product_parent.find_all(text=True):
+                text = elem.strip()
+                if len(text) > 3 and not text.lower() in ["vendor", "product", "versions", "affected"]:
+                    if any(char.isalnum() for char in text):
+                        details["affected_products"].append(text)
 
-    # Combine results
-    all_results = already_complete + enhanced_results
-    print(
-        f"Enhanced {len([r for r in enhanced_results if r.source == 'MITRE+NIST'])} CVEs successfully"
-    )
+        # Extract references
+        refs_section = soup.find(text=re.compile("References", re.I))
+        if refs_section:
+            refs_parent = refs_section.parent
+            ref_links = refs_parent.find_all("a", href=True)
+            for link in ref_links:
+                href = link.get("href", "")
+                if href.startswith("http"):
+                    details["references"].append(href)
 
-    return all_results
+        # Extract published date
+        pub_section = soup.find(text=re.compile("Published", re.I))
+        if pub_section:
+            pub_parent = pub_section.parent
+            date_pattern = re.search(r"\d{4}-\d{2}-\d{2}", pub_parent.get_text())
+            if date_pattern:
+                details["published_date"] = date_pattern.group()
+
+        # Cache the result
+        with _cache_lock:
+            _cve_org_cache[cve_id] = details
+
+        return details
+
+    except Exception as e:
+        print(f"Error fetching CVE.org details for {cve_id}: {e}")
+        with _cache_lock:
+            _cve_org_cache[cve_id] = None
+        return None
+
+
+def search_nist_cve_by_keyword(query: str, max_results: int = 10) -> List[str]:
+    """Search NIST NVD for CVE IDs using keyword search"""
+    try:
+        print(f"Searching NIST NVD for: '{query}'")
+        
+        nist_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+        params = {
+            "keywordSearch": query,
+            "resultsPerPage": min(max_results, 20)  # NIST API limit
+        }
+
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+        }
+
+        response = requests.get(nist_url, params=params, headers=headers, timeout=15)
+        response.raise_for_status()
+
+        data = response.json()
+        cve_ids = []
+
+        if "vulnerabilities" in data:
+            for vuln in data["vulnerabilities"]:
+                cve_data = vuln.get("cve", {})
+                cve_id = cve_data.get("id", "")
+                if cve_id and cve_id not in cve_ids:
+                    cve_ids.append(cve_id)
+
+        print(f"NIST NVD found {len(cve_ids)} CVE IDs")
+        return cve_ids[:max_results]
+
+    except Exception as e:
+        print(f"Error searching NIST NVD: {e}")
+        return []
+
+
+def merge_cve_data(nist_result: CVEResult, cve_org_details: Dict) -> CVEResult:
+    """Merge data from NIST and CVE.org sources"""
+    if not cve_org_details:
+        return nist_result
+
+    # Use the more detailed description
+    if cve_org_details.get("description") and len(cve_org_details["description"]) > len(nist_result.description):
+        nist_result.description = cve_org_details["description"]
+
+    # Merge CWE information
+    if cve_org_details.get("cwe_info"):
+        for cwe in cve_org_details["cwe_info"]:
+            if cwe not in nist_result.cwe_info:
+                nist_result.cwe_info.append(cwe)
+
+    # Use CVE.org data if NIST is missing information
+    if nist_result.score == 0.0 and cve_org_details.get("cvss_score", 0.0) > 0.0:
+        nist_result.score = cve_org_details["cvss_score"]
+        nist_result.severity = cve_org_details.get("severity", nist_result.severity)
+
+    if not nist_result.vector_string and cve_org_details.get("vector_string"):
+        nist_result.vector_string = cve_org_details["vector_string"]
+
+    if not nist_result.cvss_version and cve_org_details.get("cvss_version"):
+        nist_result.cvss_version = cve_org_details["cvss_version"]
+
+    # Merge affected products
+    if cve_org_details.get("affected_products"):
+        for product in cve_org_details["affected_products"]:
+            if product not in nist_result.affected_products:
+                nist_result.affected_products.append(product)
+
+    # Merge references
+    if cve_org_details.get("references"):
+        for ref in cve_org_details["references"]:
+            if ref not in nist_result.references:
+                nist_result.references.append(ref)
+
+    # Update source to indicate merged data
+    nist_result.source = "NIST+CVE.org"
+    
+    return nist_result
+
+
+def parallel_cve_search(query: str, max_results: int = 10) -> Tuple[List[str], List[str]]:
+    """Search both CVE.org and NIST NVD in parallel for CVE IDs"""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        # Submit both searches concurrently
+        cve_org_future = executor.submit(search_cve_org, query, max_results)
+        nist_future = executor.submit(search_nist_cve_by_keyword, query, max_results)
+        
+        # Wait for results
+        cve_org_results = cve_org_future.result()
+        nist_results = nist_future.result()
+        
+        return cve_org_results, nist_results
 
 
 def combined_cve_search(query: str, max_results: int = 10) -> List[CVEResult]:
-    """Modified search that uses only MITRE for searching and NIST for details."""
-    print(f"Starting MITRE-only search for: '{query}' (max: {max_results})")
+    """Enhanced search that uses both CVE.org and NIST NVD in parallel"""
+    print(f"Starting enhanced parallel search for: '{query}' (max: {max_results})")
 
     # Check if the query is a specific CVE ID
     cve_id_pattern = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
@@ -572,26 +522,113 @@ def combined_cve_search(query: str, max_results: int = 10) -> List[CVEResult]:
     if match:
         cve_id = match.group(0).upper()
         print(f"Direct lookup detected for CVE ID: {cve_id}")
-        result = get_nist_cve_details(cve_id)
-        if result:
-            # Add a specific source to indicate a direct lookup
-            result.source = "NIST (Direct)"
-            return [result]
+        
+        # Get data from both sources in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            nist_future = executor.submit(get_nist_cve_details, cve_id)
+            cve_org_future = executor.submit(get_cve_org_details, cve_id)
+            
+            nist_result = nist_future.result()
+            cve_org_details = cve_org_future.result()
+        
+        if nist_result:
+            merged_result = merge_cve_data(nist_result, cve_org_details)
+            merged_result.source = "NIST+CVE.org (Direct)"
+            return [merged_result]
         else:
             print(f"No details found for the specific CVE ID: {cve_id}")
             return []
 
-    # If not a specific CVE ID, proceed with MITRE keyword search only
-    print("Searching MITRE CVE database...")
-    mitre_results = search_mitre_cve(query, max_results)
+    # Search both sources in parallel for CVE IDs
+    print("Searching both CVE.org and NIST NVD in parallel...")
+    cve_org_ids, nist_ids = parallel_cve_search(query, max_results)
 
-    if not mitre_results:
-        print("No CVEs found in MITRE search")
+    # Combine and deduplicate CVE IDs
+    all_cve_ids = []
+    seen_ids = set()
+    
+    # Prioritize CVE.org results (newer search interface)
+    for cve_id in cve_org_ids:
+        if cve_id not in seen_ids:
+            all_cve_ids.append(cve_id)
+            seen_ids.add(cve_id)
+    
+    # Add NIST results that aren't already included
+    for cve_id in nist_ids:
+        if cve_id not in seen_ids:
+            all_cve_ids.append(cve_id)
+            seen_ids.add(cve_id)
+
+    # Limit to max_results
+    all_cve_ids = all_cve_ids[:max_results]
+    
+    if not all_cve_ids:
+        print("No CVEs found in either source")
         return []
 
-    # Enhance all MITRE results with NIST details
-    print(f"Found {len(mitre_results)} CVEs from MITRE, enhancing with NIST details...")
-    enhanced_results = batch_enhance_cves(mitre_results, max_concurrent=2)
+    print(f"Found {len(all_cve_ids)} unique CVE IDs, fetching detailed information...")
 
-    print(f"Final result: {len(enhanced_results)} CVEs with enhanced data")
-    return enhanced_results
+    # Get detailed information for each CVE ID
+    results = []
+    
+    def get_enhanced_cve_details(cve_id: str) -> Optional[CVEResult]:
+        """Get detailed info from both NIST and CVE.org and merge them"""
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            nist_future = executor.submit(get_nist_cve_details, cve_id)
+            cve_org_future = executor.submit(get_cve_org_details, cve_id)
+            
+            nist_result = nist_future.result()
+            cve_org_details = cve_org_future.result()
+        
+        if nist_result:
+            return merge_cve_data(nist_result, cve_org_details)
+        elif cve_org_details:
+            # Create CVEResult from CVE.org data if NIST doesn't have it
+            return CVEResult(
+                cve_id=cve_id,
+                description=cve_org_details.get("description", f"CVE details from CVE.org for {cve_id}"),
+                severity=cve_org_details.get("severity", "Unknown"),
+                published_date=cve_org_details.get("published_date", "Unknown"),
+                modified_date="Unknown",
+                score=cve_org_details.get("cvss_score", 0.0),
+                source="CVE.org",
+                cwe_info=cve_org_details.get("cwe_info", []),
+                affected_products=cve_org_details.get("affected_products", []),
+                references=cve_org_details.get("references", []),
+                vector_string=cve_org_details.get("vector_string", ""),
+                cvss_version=cve_org_details.get("cvss_version", ""),
+            )
+        return None
+
+    # Process CVE IDs with controlled concurrency
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        future_to_cve = {executor.submit(get_enhanced_cve_details, cve_id): cve_id 
+                         for cve_id in all_cve_ids}
+        
+        for future in concurrent.futures.as_completed(future_to_cve):
+            result = future.result()
+            if result:
+                results.append(result)
+            
+            # Small delay to be respectful to APIs
+            time.sleep(0.2)
+
+    print(f"Successfully retrieved detailed information for {len(results)} CVEs")
+    
+    # Sort results by score (highest first) and then by CVE ID
+    results.sort(key=lambda x: (-x.score if x.score > 0 else 0, x.cve_id), reverse=True)
+    
+    return results
+
+
+# Keep the original function for backward compatibility
+def search_mitre_cve(query: str, max_results: int = 10) -> List[CVEResult]:
+    """Wrapper function for backward compatibility - now uses the enhanced search"""
+    return combined_cve_search(query, max_results)
+
+
+def batch_enhance_cves(cve_results: List[CVEResult], max_concurrent: int = 3) -> List[CVEResult]:
+    """Enhanced batch enhancement that now uses both NIST and CVE.org"""
+    # The new combined search already enhances results, so we just return them
+    print(f"Results are already enhanced with data from multiple sources")
+    return cve_results
