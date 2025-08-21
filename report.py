@@ -4,7 +4,7 @@ import streamlit as st
 from typing import Dict, Any, List, Tuple
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from cve_core import CVESearchAgent, combined_cve_search
+from utils.core_functions import combined_cve_search
 from utils.export_excel import export_results_to_excel
 
 # Page configuration
@@ -78,10 +78,6 @@ class ChatInterface:
     def clear_chat():
         st.session_state.chat_messages = []
 
-
-@st.cache_resource
-def initialize_agent():
-    return CVESearchAgent()
 
 
 def read_uploaded_file(uploaded_file) -> pd.DataFrame:
@@ -382,13 +378,6 @@ def main():
             - No CVSS/TruRisk data — Requires investigation
             """
         )
-
-    # Initialize agent
-    try:
-        agent = initialize_agent()
-    except ValueError as e:
-        st.error(f"⚠️ {e}")
-        st.stop()
 
     # File upload
     st.subheader("📤 Upload Vulnerability Report")
