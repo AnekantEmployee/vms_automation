@@ -1,7 +1,7 @@
 import time
 import pandas as pd
 import streamlit as st
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, Tuple
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.core_functions import combined_cve_search

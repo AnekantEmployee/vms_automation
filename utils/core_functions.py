@@ -1,15 +1,36 @@
 import re
-import requests
+import json
 import time
+import requests
 import urllib.parse
 import concurrent.futures
 from threading import Lock
 from bs4 import BeautifulSoup
-from dataclasses import dataclass
-from typing import List, Optional, Dict, Tuple
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Tuple, TypedDict, Annotated
+import os
+from dotenv import load_dotenv
 
+# LangGraph and LangChain imports
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.tools import tool
+from langchain_google_genai import ChatGoogleGenerativeAI
 
-# Cache for NIST API results to avoid duplicate calls
+# Optional TavilySearch import
+try:
+    from langchain_community.tools.tavily_search import TavilySearchResults
+    TAVILY_AVAILABLE = True
+    print("TavilySearch available")
+except ImportError:
+    TAVILY_AVAILABLE = False
+    print("TavilySearch not available - continuing without it")
+
+# Load environment variables
+load_dotenv()
+
+# --- Caching ---
 _nist_cache = {}
 _cve_org_cache = {}
 _cache_lock = Lock()
@@ -24,611 +45,662 @@ class CVEResult:
     modified_date: str
     score: float
     source: str = "NIST"
-    # Enhanced fields
     vuln_status: str = "Unknown"
-    cwe_info: List[str] = None
-    affected_products: List[str] = None
-    references: List[str] = None
+    cwe_info: List[str] = field(default_factory=list)
+    affected_products: List[str] = field(default_factory=list)
+    references: List[str] = field(default_factory=list)
     exploitability_score: float = 0.0
     impact_score: float = 0.0
     vector_string: str = ""
     cvss_version: str = ""
+    confidence_score: float = 1.0
 
-    def __post_init__(self):
-        if self.cwe_info is None:
-            self.cwe_info = []
-        if self.affected_products is None:
-            self.affected_products = []
-        if self.references is None:
-            self.references = []
-
-
-def extract_cpe_products(configurations: List[Dict]) -> List[str]:
-    """Extract affected products from CPE configurations"""
-    products = []
-    try:
-        for config in configurations:
-            nodes = config.get("nodes", [])
-            for node in nodes:
-                cpe_matches = node.get("cpeMatch", [])
-                for cpe_match in cpe_matches:
-                    if cpe_match.get("vulnerable", False):
-                        criteria = cpe_match.get("criteria", "")
-                        if criteria.startswith("cpe:2.3:"):
-                            # Parse CPE format: cpe:2.3:part:vendor:product:version:...
-                            parts = criteria.split(":")
-                            if len(parts) >= 5:
-                                vendor = parts[3].replace("_", " ").title()
-                                product = parts[4].replace("_", " ").title()
-                                version = (
-                                    parts[5] if parts[5] != "*" else "All Versions"
-                                )
-                                product_info = f"{vendor} {product}"
-                                if version != "All Versions":
-                                    product_info += f" {version}"
-                                products.append(product_info)
-    except Exception as e:
-        print(f"Error extracting CPE products: {e}")
-
-    return list(set(products))  # Remove duplicates
-
-
-def extract_weakness_info(weaknesses: List[Dict]) -> List[str]:
-    """Extract CWE information from weaknesses"""
-    cwe_list = []
-    try:
-        for weakness in weaknesses:
-            descriptions = weakness.get("description", [])
-            for desc in descriptions:
-                if desc.get("lang") == "en":
-                    cwe_value = desc.get("value", "")
-                    if cwe_value and cwe_value != "NVD-CWE-Other":
-                        cwe_list.append(cwe_value)
-    except Exception as e:
-        print(f"Error extracting weakness info: {e}")
-
-    return cwe_list
-
-
-def get_nist_cve_details(cve_id: str) -> Optional[CVEResult]:
-    """Get detailed information for a specific CVE from NIST with enhanced data extraction"""
-    with _cache_lock:
-        if cve_id in _nist_cache:
-            print(f"Using cached NIST data for: {cve_id}")
-            return _nist_cache[cve_id]
-
-    try:
-        print(f"Fetching enhanced NIST details for: {cve_id}")
-
-        nist_url = f"https://services.nvd.nist.gov/rest/json/cves/2.0"
-        params = {"cveId": cve_id}
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json",
+    def to_dict(self):
+        """Convert to dictionary for easy serialization"""
+        return {
+            "cve_id": self.cve_id,
+            "description": self.description,
+            "severity": self.severity,
+            "published_date": self.published_date,
+            "modified_date": self.modified_date,
+            "score": self.score,
+            "source": self.source,
+            "vuln_status": self.vuln_status,
+            "cwe_info": self.cwe_info,
+            "affected_products": self.affected_products,
+            "references": self.references,
+            "exploitability_score": self.exploitability_score,
+            "impact_score": self.impact_score,
+            "vector_string": self.vector_string,
+            "cvss_version": self.cvss_version,
+            "confidence_score": self.confidence_score
         }
 
-        response = requests.get(nist_url, params=params, headers=headers, timeout=15)
-        response.raise_for_status()
 
+# --- State Definition and Tools ---
+class CVESearchState(TypedDict):
+    messages: Annotated[list, add_messages]
+    original_query: str
+    enhanced_queries: List[str]
+    search_results: List[Dict]
+    cve_results: List[CVEResult]
+    search_attempts: int
+    max_attempts: int
+    search_strategy: str
+    external_search_done: bool
+
+
+@tool
+def extract_cve_keywords(query: str) -> str:
+    """Extract and enhance keywords for CVE searching from a vulnerability description."""
+    keyword_mappings = {
+        'ssl/tls': ['certificate', 'encryption', 'handshake', 'cipher'],
+        'ssh': ['openssh', 'authentication', 'key exchange', 'protocol'],
+        'web server': ['apache', 'nginx', 'iis', 'http', 'https'],
+        'authentication': ['login', 'bypass', 'credential', 'password'],
+        'injection': ['sql', 'command', 'code', 'script'],
+        'buffer': ['overflow', 'underflow', 'memory', 'heap', 'stack'],
+        'privilege': ['escalation', 'elevation', 'root', 'admin'],
+        'denial': ['service', 'dos', 'crash', 'hang'],
+        'cross-site': ['xss', 'scripting', 'javascript'],
+        'remote': ['code', 'execution', 'rce', 'command'],
+        'kernel': ['linux', 'windows', 'driver', 'system'],
+        'certificate': ['validation', 'verification', 'chain', 'trust']
+    }
+    query_lower = query.lower()
+    extracted_keywords = []
+    words = re.findall(r'\b\w{3,}\b', query_lower)
+    for word in words:
+        if len(word) > 3:
+            extracted_keywords.append(word)
+    for main_term, related_terms in keyword_mappings.items():
+        if main_term.replace('/', ' ') in query_lower or any(term in query_lower for term in main_term.split('/')):
+            extracted_keywords.extend(related_terms[:2])
+    seen = set()
+    unique_keywords = []
+    for keyword in extracted_keywords:
+        if keyword not in seen and len(keyword) > 2:
+            seen.add(keyword)
+            unique_keywords.append(keyword)
+    result = ' '.join(unique_keywords[:6])
+    print(f"Extracted keywords from '{query}': {result}")
+    return result
+
+
+@tool
+def search_external_cve_info(query: str) -> str:
+    """Search for additional CVE information using external search if available."""
+    if not TAVILY_AVAILABLE:
+        print("External search not available")
+        return f"External search not available. Query was: {query}"
+    try:
+        search = TavilySearchResults(max_results=3, search_depth="basic")
+        cve_query = f"CVE vulnerability {query} security"
+        results = search.run(cve_query)
+        if results:
+            print(f"Found {len(results)} external results for: {query}")
+            return f"External search results for '{query}': {json.dumps(results, indent=2)}"
+        else:
+            return f"No external results found for: {query}"
+    except Exception as e:
+        print(f"External search failed: {e}")
+        return f"External search failed: {str(e)}"
+
+
+# --- Agent Nodes ---
+def query_analyzer_node(state: CVESearchState) -> CVESearchState:
+    print(f"\n--- Analyzing Query ---")
+    print(f"Original query: {state['original_query']}")
+    try:
+        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.1, max_tokens=150)
+        prompt = f"""
+        Analyze this security vulnerability query and extract the most important search terms for finding CVEs:
+        Query: "{state['original_query']}"
+        Focus on:
+        1. Software/product names (Apache, Linux, Windows, etc.)
+        2. Vulnerability types (RCE, XSS, buffer overflow, etc.)
+        3. Technical components (SSL, SSH, authentication, etc.)
+        Return only the key search terms, maximum 6 words, separated by spaces.
+        Be specific and use terms commonly found in CVE descriptions.
+        Search terms:"""
+        response = llm.invoke([HumanMessage(content=prompt)])
+        enhanced_query = response.content.strip().lower()
+        if not enhanced_query or len(enhanced_query) < 5:
+            enhanced_query = extract_cve_keywords(state['original_query'])
+        print(f"LLM Enhanced query: {enhanced_query}")
+        enhanced_queries = list(dict.fromkeys([
+            enhanced_query,
+            extract_cve_keywords(state['original_query']),
+            state['original_query'].lower()
+        ]))
+        return {
+            **state,
+            "enhanced_queries": enhanced_queries,
+            "messages": state["messages"] + [AIMessage(content=f"Generated enhanced queries: {enhanced_queries}")]
+        }
+    except Exception as e:
+        print(f"Query analysis failed: {e}")
+        enhanced_query = extract_cve_keywords(state['original_query'])
+        return {
+            **state,
+            "enhanced_queries": [enhanced_query, state['original_query'].lower()],
+            "messages": state["messages"] + [AIMessage(content=f"Fallback query enhancement: {enhanced_query}")]
+        }
+
+
+def cve_search_node(state: CVESearchState) -> CVESearchState:
+    print(f"\n--- Searching for CVEs ---")
+    search_attempts = state.get('search_attempts', 0)
+    print(f"Attempt {search_attempts + 1}/{state.get('max_attempts', 3)}")
+    if search_attempts >= state.get('max_attempts', 3):
+        print("Max search attempts reached")
+        return state
+
+    all_results = []
+    query_to_try = state['enhanced_queries'][search_attempts]
+    print(f"Using query: '{query_to_try}'")
+    
+    # Search in actual CVE databases
+    results = search_cve_databases(query_to_try)
+    
+    if results:
+        all_results.extend(results)
+        print(f"Found {len(results)} potential results for query.")
+    else:
+        print(f"No results found for query.")
+    
+    existing_cves = {cve.cve_id for cve in state.get('cve_results', [])}
+    unique_results = [res for res in all_results if res.cve_id not in existing_cves]
+    
+    final_results = state.get('cve_results', []) + unique_results
+    print(f"Total unique CVEs found so far: {len(final_results)}")
+    
+    return {
+        **state,
+        "cve_results": final_results,
+        "search_attempts": search_attempts + 1,
+        "messages": state["messages"] + [AIMessage(content=f"Found {len(unique_results)} new CVE results in attempt {search_attempts + 1}")]
+    }
+
+
+def external_search_node(state: CVESearchState) -> CVESearchState:
+    print("\n--- Performing External Search ---")
+    if state.get('external_search_done', False):
+        print("External search already completed.")
+        return state
+    try:
+        external_results = search_external_cve_info(state['original_query'])
+        return {
+            **state,
+            "search_results": [{"external_search": external_results}],
+            "external_search_done": True,
+            "messages": state["messages"] + [AIMessage(content="Performed external search for additional context")]
+        }
+    except Exception as e:
+        print(f"External search failed: {e}")
+        return {
+            **state,
+            "external_search_done": True,
+            "messages": state["messages"] + [AIMessage(content=f"External search failed: {str(e)}")]
+        }
+
+
+def result_scorer_node(state: CVESearchState) -> CVESearchState:
+    print("\n--- Scoring and Ranking Results ---")
+    if not state['cve_results']:
+        print("No CVE results to score.")
+        return state
+    
+    print(f"Scoring {len(state['cve_results'])} CVE results...")
+    for result in state['cve_results']:
+        result.confidence_score = calculate_relevance_score(result, state['original_query'])
+    
+    state['cve_results'].sort(key=lambda x: (x.confidence_score, x.score), reverse=True)
+    print("CVE results scored and ranked successfully.")
+    return {
+        **state,
+        "messages": state["messages"] + [AIMessage(content="Scored and ranked CVE results by relevance")]
+    }
+
+
+# --- Helper Functions with Real CVE Database Search ---
+def calculate_relevance_score(cve_result: CVEResult, original_query: str) -> float:
+    """Calculate how relevant a CVE is to the original query."""
+    query_lower = original_query.lower()
+    desc_lower = cve_result.description.lower()
+    score = 0.0
+    query_words = set(re.findall(r'\b\w{3,}\b', query_lower))
+    desc_words = set(re.findall(r'\b\w{3,}\b', desc_lower))
+    matches = query_words.intersection(desc_words)
+    score += len(matches) * 2.0
+    if cve_result.score > 7.0: score += 1.5
+    elif cve_result.score > 4.0: score += 1.0
+    if cve_result.published_date and '2024' in cve_result.published_date: score += 0.5
+    return min(score, 10.0)
+
+
+def search_cve_databases(query: str) -> List[CVEResult]:
+    """Search multiple CVE databases for the given query."""
+    print(f"Searching CVE databases for: '{query}'")
+    
+    results = []
+    
+    # Search NIST NVD database
+    nist_results = search_nist_nvd(query)
+    if nist_results:
+        results.extend(nist_results)
+    
+    # Search CVE.org database
+    cve_org_results = search_cve_org(query)
+    if cve_org_results:
+        results.extend(cve_org_results)
+    
+    # If no results found, try a broader search
+    if not results:
+        print("No results found with original query, trying broader search")
+        broader_query = " ".join(query.split()[:3])  # Use first 3 keywords
+        if broader_query != query:
+            nist_results = search_nist_nvd(broader_query)
+            if nist_results:
+                results.extend(nist_results)
+    
+    return results
+
+
+def search_nist_nvd(query: str) -> List[CVEResult]:
+    """Search the NIST National Vulnerability Database."""
+    print(f"Searching NIST NVD for: {query}")
+    
+    try:
+        # Check cache first
+        with _cache_lock:
+            if query in _nist_cache:
+                print(f"Using cached NIST results for: {query}")
+                return _nist_cache[query]
+        
+        # Encode query for URL
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://services.nvd.nist.gov/rest/json/cves/2.0?keywordSearch={encoded_query}"
+        
+        # Make request to NVD API
+        headers = {
+            "User-Agent": "CVE-Search-Agent/1.0 (Security Research)"
+        }
+        
+        response = requests.get(url, headers=headers, timeout=30)
+        
+        if response.status_code != 200:
+            print(f"NVD API returned status code: {response.status_code}")
+            return []
+        
         data = response.json()
-        result = None
-
-        if "vulnerabilities" in data and data["vulnerabilities"]:
-            vuln = data["vulnerabilities"][0]
-            cve_data = vuln.get("cve", {})
-
-            # Basic information
-            descriptions = cve_data.get("descriptions", [])
-            description = next(
-                (d["value"] for d in descriptions if d["lang"] == "en"),
-                "No description available",
-            )
-
-            # Enhanced vulnerability status
-            vuln_status = cve_data.get("vulnStatus", "Unknown")
-
-            # Enhanced metrics extraction
-            metrics = cve_data.get("metrics", {})
-            score = 0.0
-            severity = "Unknown"
-            exploitability_score = 0.0
-            impact_score = 0.0
-            vector_string = ""
-            cvss_version = ""
-
-            # Try CVSS v3.1 first, then v3.0, then v2
-            if "cvssMetricV31" in metrics and metrics["cvssMetricV31"]:
-                cvss_data = metrics["cvssMetricV31"][0]["cvssData"]
-                score = cvss_data.get("baseScore", 0.0)
-                severity = cvss_data.get("baseSeverity", "Unknown")
-                vector_string = cvss_data.get("vectorString", "")
-                cvss_version = "3.1"
-            elif "cvssMetricV30" in metrics and metrics["cvssMetricV30"]:
-                cvss_data = metrics["cvssMetricV30"][0]["cvssData"]
-                score = cvss_data.get("baseScore", 0.0)
-                severity = cvss_data.get("baseSeverity", "Unknown")
-                vector_string = cvss_data.get("vectorString", "")
-                cvss_version = "3.0"
-            elif "cvssMetricV2" in metrics and metrics["cvssMetricV2"]:
-                cvss_v2 = metrics["cvssMetricV2"][0]
-                cvss_data = cvss_v2["cvssData"]
-                score = cvss_data.get("baseScore", 0.0)
-                vector_string = cvss_data.get("vectorString", "")
-                cvss_version = "2.0"
-                exploitability_score = cvss_v2.get("exploitabilityScore", 0.0)
-                impact_score = cvss_v2.get("impactScore", 0.0)
-                # Map CVSS v2 score to severity
-                if score >= 7.0:
-                    severity = "HIGH"
-                elif score >= 4.0:
-                    severity = "MEDIUM"
-                elif score > 0.0:
-                    severity = "LOW"
-
-            # Extract CWE information
-            weaknesses = cve_data.get("weaknesses", [])
-            cwe_info = extract_weakness_info(weaknesses)
-
-            # Extract affected products from configurations
-            configurations = cve_data.get("configurations", [])
-            affected_products = extract_cpe_products(configurations)
-
-            # Extract references
-            references = []
-            ref_list = cve_data.get("references", [])
-            for ref in ref_list:
-                url = ref.get("url", "")
-                if url:
-                    references.append(url)
-
-            result = CVEResult(
-                cve_id=cve_id,
-                description=description,
-                severity=severity,
-                published_date=cve_data.get("published", "Unknown"),
-                modified_date=cve_data.get("lastModified", "Unknown"),
-                score=score,
-                source="NIST",
-                vuln_status=vuln_status,
-                cwe_info=cwe_info,
-                affected_products=affected_products[:10],  # Limit to first 10
-                references=references[:5],  # Limit to first 5
-                exploitability_score=exploitability_score,
-                impact_score=impact_score,
-                vector_string=vector_string,
-                cvss_version=cvss_version,
-            )
-
-        # Cache the result (even if None)
-        with _cache_lock:
-            _nist_cache[cve_id] = result
-
-        return result
-
-    except Exception as e:
-        print(f"Error fetching enhanced NIST details for {cve_id}: {e}")
-        with _cache_lock:
-            _nist_cache[cve_id] = None
-        return None
-
-
-def search_cve_org(query: str, max_results: int = 10) -> List[str]:
-    """Search CVE.org for CVE IDs using the new search interface"""
-    try:
-        print(f"Searching CVE.org for: '{query}'")
         
-        # URL encode the query
-        encoded_query = urllib.parse.quote_plus(query)
-        cve_org_url = f"https://www.cve.org/CVERecord/SearchResults?query={encoded_query}"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Connection": "keep-alive",
-            "Upgrade-Insecure-Requests": "1",
-        }
-
-        response = requests.get(cve_org_url, headers=headers, timeout=30)
-        response.raise_for_status()
-
-        soup = BeautifulSoup(response.content, "html.parser")
-        cve_ids = []
-
-        # Look for CVE IDs in the search results
-        # Method 1: Find direct CVE links
-        cve_links = soup.find_all("a", href=re.compile(r"/CVERecord\?id=CVE-\d{4}-\d+", re.I))
-        for link in cve_links:
-            href = link.get("href", "")
-            cve_match = re.search(r"CVE-\d{4}-\d{4,}", href, re.IGNORECASE)
-            if cve_match:
-                cve_id = cve_match.group().upper()
-                if cve_id not in cve_ids:
-                    cve_ids.append(cve_id)
-
-        # Method 2: Find CVE patterns in text content
-        if not cve_ids:
-            # Look for CVE patterns in the page text
-            page_text = soup.get_text()
-            cve_patterns = re.findall(r"CVE-\d{4}-\d{4,}", page_text, re.IGNORECASE)
-            for cve_pattern in cve_patterns:
-                cve_id = cve_pattern.upper()
-                if cve_id not in cve_ids:
-                    cve_ids.append(cve_id)
-
-        # Method 3: Look for specific CVE result sections
-        if not cve_ids:
-            # Try to find result containers
-            result_sections = soup.find_all(['div', 'section', 'article'], 
-                                          class_=re.compile(r"result|search|cve", re.I))
-            for section in result_sections:
-                section_text = section.get_text()
-                cve_patterns = re.findall(r"CVE-\d{4}-\d{4,}", section_text, re.IGNORECASE)
-                for cve_pattern in cve_patterns:
-                    cve_id = cve_pattern.upper()
-                    if cve_id not in cve_ids:
-                        cve_ids.append(cve_id)
-
-        # Remove duplicates and limit results
-        unique_cve_ids = list(dict.fromkeys(cve_ids))[:max_results]
-        print(f"CVE.org found {len(unique_cve_ids)} CVE IDs")
-        
-        return unique_cve_ids
-
-    except Exception as e:
-        print(f"Error searching CVE.org: {e}")
-        return []
-
-
-def get_cve_org_details(cve_id: str) -> Optional[Dict]:
-    """Get detailed information for a specific CVE from CVE.org"""
-    with _cache_lock:
-        if cve_id in _cve_org_cache:
-            print(f"Using cached CVE.org data for: {cve_id}")
-            return _cve_org_cache[cve_id]
-
-    try:
-        print(f"Fetching CVE.org details for: {cve_id}")
-        
-        cve_url = f"https://www.cve.org/CVERecord?id={cve_id}"
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        }
-
-        response = requests.get(cve_url, headers=headers, timeout=15)
-        response.raise_for_status()
-
-        soup = BeautifulSoup(response.content, "html.parser")
-        
-        details = {
-            "cve_id": cve_id,
-            "description": "",
-            "title": "",
-            "published_date": "",
-            "cwe_info": [],
-            "cvss_score": 0.0,
-            "severity": "Unknown",
-            "vector_string": "",
-            "cvss_version": "",
-            "affected_products": [],
-            "references": []
-        }
-
-        # Extract title
-        title_elem = soup.find("h1") or soup.find(text=re.compile("Title", re.I))
-        if title_elem:
-            if hasattr(title_elem, 'get_text'):
-                details["title"] = title_elem.get_text().strip()
-            else:
-                # Find the next sibling or parent that contains the actual title
-                parent = title_elem.parent if title_elem.parent else title_elem
-                title_text = parent.get_text().strip()
-                if "Title:" in title_text:
-                    details["title"] = title_text.split("Title:")[-1].strip()
-
-        # Extract description
-        desc_section = soup.find(text=re.compile("Description", re.I))
-        if desc_section:
-            desc_parent = desc_section.parent
-            # Look for the description content in nearby elements
-            for sibling in desc_parent.next_siblings:
-                if sibling and hasattr(sibling, 'get_text'):
-                    text = sibling.get_text().strip()
-                    if len(text) > 20 and not text.startswith(("CWE", "CVSS", "Product")):
-                        details["description"] = text
-                        break
-
-        # Extract CWE information
-        cwe_section = soup.find(text=re.compile("CWE", re.I))
-        if cwe_section:
-            cwe_parent = cwe_section.parent
-            cwe_links = cwe_parent.find_all("a", href=re.compile("cwe", re.I))
-            for link in cwe_links:
-                cwe_text = link.get_text().strip()
-                if cwe_text:
-                    details["cwe_info"].append(cwe_text)
-
-        # Extract CVSS information
-        cvss_section = soup.find(text=re.compile("CVSS", re.I))
-        if cvss_section:
-            cvss_parent = cvss_section.parent
-            # Look for score patterns
-            score_pattern = re.search(r"(\d+\.?\d*)\s*(HIGH|MEDIUM|LOW|CRITICAL)", 
-                                    cvss_parent.get_text(), re.IGNORECASE)
-            if score_pattern:
-                details["cvss_score"] = float(score_pattern.group(1))
-                details["severity"] = score_pattern.group(2).upper()
-            
-            # Look for vector string
-            vector_match = re.search(r"CVSS:\d+\.\d+/[A-Z:/_]+", cvss_parent.get_text())
-            if vector_match:
-                details["vector_string"] = vector_match.group()
-                if "CVSS:4.0" in details["vector_string"]:
-                    details["cvss_version"] = "4.0"
-                elif "CVSS:3.1" in details["vector_string"]:
-                    details["cvss_version"] = "3.1"
-                elif "CVSS:3.0" in details["vector_string"]:
-                    details["cvss_version"] = "3.0"
-
-        # Extract affected products
-        product_section = soup.find(text=re.compile("Product Status|Vendor", re.I))
-        if product_section:
-            product_parent = product_section.parent
-            # Look for vendor/product information
-            for elem in product_parent.find_all(text=True):
-                text = elem.strip()
-                if len(text) > 3 and not text.lower() in ["vendor", "product", "versions", "affected"]:
-                    if any(char.isalnum() for char in text):
-                        details["affected_products"].append(text)
-
-        # Extract references
-        refs_section = soup.find(text=re.compile("References", re.I))
-        if refs_section:
-            refs_parent = refs_section.parent
-            ref_links = refs_parent.find_all("a", href=True)
-            for link in ref_links:
-                href = link.get("href", "")
-                if href.startswith("http"):
-                    details["references"].append(href)
-
-        # Extract published date
-        pub_section = soup.find(text=re.compile("Published", re.I))
-        if pub_section:
-            pub_parent = pub_section.parent
-            date_pattern = re.search(r"\d{4}-\d{2}-\d{2}", pub_parent.get_text())
-            if date_pattern:
-                details["published_date"] = date_pattern.group()
-
-        # Cache the result
-        with _cache_lock:
-            _cve_org_cache[cve_id] = details
-
-        return details
-
-    except Exception as e:
-        print(f"Error fetching CVE.org details for {cve_id}: {e}")
-        with _cache_lock:
-            _cve_org_cache[cve_id] = None
-        return None
-
-
-def search_nist_cve_by_keyword(query: str, max_results: int = 10) -> List[str]:
-    """Search NIST NVD for CVE IDs using keyword search"""
-    try:
-        print(f"Searching NIST NVD for: '{query}'")
-        
-        nist_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
-        params = {
-            "keywordSearch": query,
-            "resultsPerPage": min(max_results, 20)  # NIST API limit
-        }
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json",
-        }
-
-        response = requests.get(nist_url, params=params, headers=headers, timeout=15)
-        response.raise_for_status()
-
-        data = response.json()
-        cve_ids = []
-
+        results = []
         if "vulnerabilities" in data:
             for vuln in data["vulnerabilities"]:
-                cve_data = vuln.get("cve", {})
+                if "cve" not in vuln:
+                    continue
+                    
+                cve_data = vuln["cve"]
+                
+                # Extract basic information
                 cve_id = cve_data.get("id", "")
-                if cve_id and cve_id not in cve_ids:
-                    cve_ids.append(cve_id)
-
-        print(f"NIST NVD found {len(cve_ids)} CVE IDs")
-        return cve_ids[:max_results]
-
+                description = ""
+                if "descriptions" in cve_data and cve_data["descriptions"]:
+                    for desc in cve_data["descriptions"]:
+                        if desc.get("lang", "") == "en":
+                            description = desc.get("value", "")
+                            break
+                
+                # Extract metrics and severity
+                severity = "UNKNOWN"
+                score = 0.0
+                cvss_version = ""
+                vector_string = ""
+                
+                if "metrics" in cve_data:
+                    metrics = cve_data["metrics"]
+                    
+                    # Check for CVSS v3.1
+                    if "cvssMetricV31" in metrics and metrics["cvssMetricV31"]:
+                        cvss_data = metrics["cvssMetricV31"][0]["cvssData"]
+                        score = cvss_data.get("baseScore", 0.0)
+                        severity = get_severity_from_score(score)
+                        cvss_version = "3.1"
+                        vector_string = cvss_data.get("vectorString", "")
+                    
+                    # Fall back to CVSS v3.0
+                    elif "cvssMetricV30" in metrics and metrics["cvssMetricV30"]:
+                        cvss_data = metrics["cvssMetricV30"][0]["cvssData"]
+                        score = cvss_data.get("baseScore", 0.0)
+                        severity = get_severity_from_score(score)
+                        cvss_version = "3.0"
+                        vector_string = cvss_data.get("vectorString", "")
+                    
+                    # Fall back to CVSS v2.0
+                    elif "cvssMetricV2" in metrics and metrics["cvssMetricV2"]:
+                        cvss_data = metrics["cvssMetricV2"][0]["cvssData"]
+                        score = cvss_data.get("baseScore", 0.0)
+                        severity = get_severity_from_score(score)
+                        cvss_version = "2.0"
+                        vector_string = cvss_data.get("vectorString", "")
+                
+                # Extract dates
+                published_date = cve_data.get("published", "")
+                modified_date = cve_data.get("lastModified", "")
+                
+                # Extract CWE information
+                cwe_info = []
+                if "weaknesses" in cve_data:
+                    for weakness in cve_data["weaknesses"]:
+                        for desc in weakness.get("description", []):
+                            if desc.get("lang", "") == "en":
+                                cwe_info.append(desc.get("value", ""))
+                
+                # Extract affected products
+                affected_products = []
+                if "configurations" in cve_data:
+                    for config in cve_data["configurations"]:
+                        for node in config.get("nodes", []):
+                            for cpe in node.get("cpeMatch", []):
+                                criteria = cpe.get("criteria", "")
+                                if criteria and ":" in criteria:
+                                    affected_products.append(criteria)
+                
+                # Extract references
+                references = []
+                if "references" in cve_data:
+                    for ref in cve_data["references"]:
+                        references.append(ref.get("url", ""))
+                
+                # Create CVE result object
+                cve_result = CVEResult(
+                    cve_id=cve_id,
+                    description=description,
+                    severity=severity,
+                    published_date=published_date,
+                    modified_date=modified_date,
+                    score=score,
+                    source="NIST NVD",
+                    cwe_info=cwe_info,
+                    affected_products=affected_products,
+                    references=references,
+                    vector_string=vector_string,
+                    cvss_version=cvss_version
+                )
+                
+                results.append(cve_result)
+        
+        # Cache the results
+        with _cache_lock:
+            _nist_cache[query] = results
+            
+        print(f"Found {len(results)} results from NIST NVD")
+        return results
+        
     except Exception as e:
         print(f"Error searching NIST NVD: {e}")
         return []
 
 
-def merge_cve_data(nist_result: CVEResult, cve_org_details: Dict) -> CVEResult:
-    """Merge data from NIST and CVE.org sources"""
-    if not cve_org_details:
-        return nist_result
-
-    # Use the more detailed description
-    if cve_org_details.get("description") and len(cve_org_details["description"]) > len(nist_result.description):
-        nist_result.description = cve_org_details["description"]
-
-    # Merge CWE information
-    if cve_org_details.get("cwe_info"):
-        for cwe in cve_org_details["cwe_info"]:
-            if cwe not in nist_result.cwe_info:
-                nist_result.cwe_info.append(cwe)
-
-    # Use CVE.org data if NIST is missing information
-    if nist_result.score == 0.0 and cve_org_details.get("cvss_score", 0.0) > 0.0:
-        nist_result.score = cve_org_details["cvss_score"]
-        nist_result.severity = cve_org_details.get("severity", nist_result.severity)
-
-    if not nist_result.vector_string and cve_org_details.get("vector_string"):
-        nist_result.vector_string = cve_org_details["vector_string"]
-
-    if not nist_result.cvss_version and cve_org_details.get("cvss_version"):
-        nist_result.cvss_version = cve_org_details["cvss_version"]
-
-    # Merge affected products
-    if cve_org_details.get("affected_products"):
-        for product in cve_org_details["affected_products"]:
-            if product not in nist_result.affected_products:
-                nist_result.affected_products.append(product)
-
-    # Merge references
-    if cve_org_details.get("references"):
-        for ref in cve_org_details["references"]:
-            if ref not in nist_result.references:
-                nist_result.references.append(ref)
-
-    # Update source to indicate merged data
-    nist_result.source = "NIST+CVE.org"
+def search_cve_org(query: str) -> List[CVEResult]:
+    """Search the CVE.org database."""
+    print(f"Searching CVE.org for: {query}")
     
-    return nist_result
-
-
-def parallel_cve_search(query: str, max_results: int = 10) -> Tuple[List[str], List[str]]:
-    """Search both CVE.org and NIST NVD in parallel for CVE IDs"""
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        # Submit both searches concurrently
-        cve_org_future = executor.submit(search_cve_org, query, max_results)
-        nist_future = executor.submit(search_nist_cve_by_keyword, query, max_results)
+    try:
+        # Check cache first
+        with _cache_lock:
+            if query in _cve_org_cache:
+                print(f"Using cached CVE.org results for: {query}")
+                return _cve_org_cache[query]
         
-        # Wait for results
-        cve_org_results = cve_org_future.result()
-        nist_results = nist_future.result()
+        # CVE.org API endpoint
+        url = "https://www.cve.org/api/graphql"
         
-        return cve_org_results, nist_results
-
-
-def combined_cve_search(query: str, max_results: int = 10) -> List[CVEResult]:
-    """Enhanced search that uses both CVE.org and NIST NVD in parallel"""
-    print(f"Starting enhanced parallel search for: '{query}' (max: {max_results})")
-
-    # Check if the query is a specific CVE ID
-    cve_id_pattern = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
-    match = cve_id_pattern.match(query.strip())
-
-    if match:
-        cve_id = match.group(0).upper()
-        print(f"Direct lookup detected for CVE ID: {cve_id}")
+        # GraphQL query to search for CVEs
+        graphql_query = {
+            "query": """
+            query ($search: String!) {
+                cveList (keyword: $search) {
+                    cves {
+                        cveId
+                        descriptions {
+                            lang
+                            value
+                        }
+                        published
+                        lastModified
+                        metrics {
+                            cvssMetricV31 {
+                                cvssData {
+                                    baseScore
+                                    baseSeverity
+                                    vectorString
+                                }
+                            }
+                            cvssMetricV30 {
+                                cvssData {
+                                    baseScore
+                                    baseSeverity
+                                    vectorString
+                                }
+                            }
+                            cvssMetricV2 {
+                                cvssData {
+                                    baseScore
+                                    severity
+                                    vectorString
+                                }
+                            }
+                        }
+                        references {
+                            url
+                        }
+                        vendorComments {
+                            comment
+                        }
+                    }
+                }
+            }
+            """,
+            "variables": {
+                "search": query
+            }
+        }
         
-        # Get data from both sources in parallel
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            nist_future = executor.submit(get_nist_cve_details, cve_id)
-            cve_org_future = executor.submit(get_cve_org_details, cve_id)
-            
-            nist_result = nist_future.result()
-            cve_org_details = cve_org_future.result()
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "CVE-Search-Agent/1.0 (Security Research)"
+        }
         
-        if nist_result:
-            merged_result = merge_cve_data(nist_result, cve_org_details)
-            merged_result.source = "NIST+CVE.org (Direct)"
-            return [merged_result]
-        else:
-            print(f"No details found for the specific CVE ID: {cve_id}")
+        response = requests.post(url, json=graphql_query, headers=headers, timeout=30)
+        
+        if response.status_code != 200:
+            print(f"CVE.org API returned status code: {response.status_code}")
             return []
-
-    # Search both sources in parallel for CVE IDs
-    print("Searching both CVE.org and NIST NVD in parallel...")
-    cve_org_ids, nist_ids = parallel_cve_search(query, max_results)
-
-    # Combine and deduplicate CVE IDs
-    all_cve_ids = []
-    seen_ids = set()
-    
-    # Prioritize CVE.org results (newer search interface)
-    for cve_id in cve_org_ids:
-        if cve_id not in seen_ids:
-            all_cve_ids.append(cve_id)
-            seen_ids.add(cve_id)
-    
-    # Add NIST results that aren't already included
-    for cve_id in nist_ids:
-        if cve_id not in seen_ids:
-            all_cve_ids.append(cve_id)
-            seen_ids.add(cve_id)
-
-    # Limit to max_results
-    all_cve_ids = all_cve_ids[:max_results]
-    
-    if not all_cve_ids:
-        print("No CVEs found in either source")
+        
+        data = response.json()
+        
+        results = []
+        if "data" in data and "cveList" in data["data"] and "cves" in data["data"]["cveList"]:
+            for cve_data in data["data"]["cveList"]["cves"]:
+                cve_id = cve_data.get("cveId", "")
+                
+                # Extract description
+                description = ""
+                if "descriptions" in cve_data and cve_data["descriptions"]:
+                    for desc in cve_data["descriptions"]:
+                        if desc.get("lang", "") == "en":
+                            description = desc.get("value", "")
+                            break
+                
+                # Extract metrics and severity
+                severity = "UNKNOWN"
+                score = 0.0
+                cvss_version = ""
+                vector_string = ""
+                
+                if "metrics" in cve_data:
+                    metrics = cve_data["metrics"]
+                    
+                    # Check for CVSS v3.1
+                    if "cvssMetricV31" in metrics and metrics["cvssMetricV31"]:
+                        cvss_data = metrics["cvssMetricV31"][0]["cvssData"]
+                        score = cvss_data.get("baseScore", 0.0)
+                        severity = cvss_data.get("baseSeverity", "UNKNOWN")
+                        cvss_version = "3.1"
+                        vector_string = cvss_data.get("vectorString", "")
+                    
+                    # Check for CVSS v3.0
+                    elif "cvssMetricV30" in metrics and metrics["cvssMetricV30"]:
+                        cvss_data = metrics["cvssMetricV30"][0]["cvssData"]
+                        score = cvss_data.get("baseScore", 0.0)
+                        severity = cvss_data.get("baseSeverity", "UNKNOWN")
+                        cvss_version = "3.0"
+                        vector_string = cvss_data.get("vectorString", "")
+                    
+                    # Check for CVSS v2.0
+                    elif "cvssMetricV2" in metrics and metrics["cvssMetricV2"]:
+                        cvss_data = metrics["cvssMetricV2"][0]["cvssData"]
+                        score = cvss_data.get("baseScore", 0.0)
+                        severity = cvss_data.get("severity", "UNKNOWN")
+                        cvss_version = "2.0"
+                        vector_string = cvss_data.get("vectorString", "")
+                
+                # Extract dates
+                published_date = cve_data.get("published", "")
+                modified_date = cve_data.get("lastModified", "")
+                
+                # Extract references
+                references = []
+                if "references" in cve_data:
+                    for ref in cve_data["references"]:
+                        references.append(ref.get("url", ""))
+                
+                # Create CVE result object
+                cve_result = CVEResult(
+                    cve_id=cve_id,
+                    description=description,
+                    severity=severity,
+                    published_date=published_date,
+                    modified_date=modified_date,
+                    score=score,
+                    source="CVE.org",
+                    references=references,
+                    vector_string=vector_string,
+                    cvss_version=cvss_version
+                )
+                
+                results.append(cve_result)
+        
+        # Cache the results
+        with _cache_lock:
+            _cve_org_cache[query] = results
+            
+        print(f"Found {len(results)} results from CVE.org")
+        return results
+        
+    except Exception as e:
+        print(f"Error searching CVE.org: {e}")
         return []
 
-    print(f"Found {len(all_cve_ids)} unique CVE IDs, fetching detailed information...")
 
-    # Get detailed information for each CVE ID
-    results = []
+def get_severity_from_score(score: float) -> str:
+    """Convert CVSS score to severity level."""
+    if score >= 9.0:
+        return "CRITICAL"
+    elif score >= 7.0:
+        return "HIGH"
+    elif score >= 4.0:
+        return "MEDIUM"
+    elif score > 0.0:
+        return "LOW"
+    else:
+        return "UNKNOWN"
+
+
+# --- Decision Functions ---
+def should_continue_search(state: CVESearchState) -> str:
+    """Decide next step based on search results and attempts."""
+    print("\n--- Making a Decision ---")
+    if state.get('cve_results'):
+        print("Decision: Found CVE results. Proceeding to scoring.")
+        return "score_results"
     
-    def get_enhanced_cve_details(cve_id: str) -> Optional[CVEResult]:
-        """Get detailed info from both NIST and CVE.org and merge them"""
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            nist_future = executor.submit(get_nist_cve_details, cve_id)
-            cve_org_future = executor.submit(get_cve_org_details, cve_id)
-            
-            nist_result = nist_future.result()
-            cve_org_details = cve_org_future.result()
+    if state.get('search_attempts', 0) < state.get('max_attempts', 3):
+        print("Decision: No results yet, continuing search with next query.")
+        return "continue_search"
+    
+    print("Decision: Max internal search attempts reached without results. Trying external search.")
+    return "external_search"
+
+
+# --- Build Agent Graph ---
+def create_cve_agent():
+    """Create the CVE search agent using LangGraph."""
+    workflow = StateGraph(CVESearchState)
+    workflow.add_node("analyze_query", query_analyzer_node)
+    workflow.add_node("search_cves", cve_search_node)
+    workflow.add_node("external_search", external_search_node)
+    workflow.add_node("score_results", result_scorer_node)
+    
+    workflow.add_edge(START, "analyze_query")
+    workflow.add_edge("analyze_query", "search_cves")
+    
+    workflow.add_conditional_edges(
+        "search_cves",
+        should_continue_search,
+        {
+            "score_results": "score_results",
+            "continue_search": "search_cves",
+            "external_search": "external_search"
+        }
+    )
+    
+    workflow.add_edge("external_search", END)
+    workflow.add_edge("score_results", END)
+    
+    app = workflow.compile()
+    return app
+
+
+# --- Main Search Function ---
+def combined_cve_search(query: str, max_results: int = 10) -> List[CVEResult]:
+    """Enhanced CVE search using agent-based approach."""
+    print(f"======== Starting Agent-Based CVE Search ========")
+    print(f"Initial Query: '{query}'")
+    print(f"=================================================")
+    try:
+        agent = create_cve_agent()
+        initial_state = {
+            "messages": [HumanMessage(content=f"Search for CVEs related to: {query}")],
+            "original_query": query,
+            "enhanced_queries": [],
+            "search_results": [],
+            "cve_results": [],
+            "search_attempts": 0,
+            "max_attempts": 3,
+            "search_strategy": "multi_source",
+            "external_search_done": False
+        }
         
-        if nist_result:
-            return merge_cve_data(nist_result, cve_org_details)
-        elif cve_org_details:
-            # Create CVEResult from CVE.org data if NIST doesn't have it
-            return CVEResult(
-                cve_id=cve_id,
-                description=cve_org_details.get("description", f"CVE details from CVE.org for {cve_id}"),
-                severity=cve_org_details.get("severity", "Unknown"),
-                published_date=cve_org_details.get("published_date", "Unknown"),
-                modified_date="Unknown",
-                score=cve_org_details.get("cvss_score", 0.0),
-                source="CVE.org",
-                cwe_info=cve_org_details.get("cwe_info", []),
-                affected_products=cve_org_details.get("affected_products", []),
-                references=cve_org_details.get("references", []),
-                vector_string=cve_org_details.get("vector_string", ""),
-                cvss_version=cve_org_details.get("cvss_version", ""),
-            )
-        return None
-
-    # Process CVE IDs with controlled concurrency
-    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
-        future_to_cve = {executor.submit(get_enhanced_cve_details, cve_id): cve_id 
-                         for cve_id in all_cve_ids}
+        config = {"recursion_limit": 10}
+        final_state = agent.invoke(initial_state, config=config)
         
-        for future in concurrent.futures.as_completed(future_to_cve):
-            result = future.result()
-            if result:
-                results.append(result)
+        cve_results = final_state.get("cve_results", [])
+        
+        if cve_results:
+            print(f"\n======== Agent Search Complete ========")
+            print(f"Agent found {len(cve_results)} relevant CVE(s).")
+            return cve_results[:max_results]
+        else:
+            print(f"\n======== Agent Search Complete ========")
+            print(f"Agent found no relevant CVEs for query: '{query}'")
+            return []
             
-            # Small delay to be respectful to APIs
-            time.sleep(0.2)
-
-    print(f"Successfully retrieved detailed information for {len(results)} CVEs")
-    
-    # Sort results by score (highest first) and then by CVE ID
-    results.sort(key=lambda x: (-x.score if x.score > 0 else 0, x.cve_id), reverse=True)
-    
-    return results
-
-
-# Keep the original function for backward compatibility
-def search_mitre_cve(query: str, max_results: int = 10) -> List[CVEResult]:
-    """Wrapper function for backward compatibility - now uses the enhanced search"""
-    return combined_cve_search(query, max_results)
-
-
-def batch_enhance_cves(cve_results: List[CVEResult], max_concurrent: int = 3) -> List[CVEResult]:
-    """Enhanced batch enhancement that now uses both NIST and CVE.org"""
-    # The new combined search already enhances results, so we just return them
-    print(f"Results are already enhanced with data from multiple sources")
-    return cve_results
+    except Exception as e:
+        print(f"\n!!!!!!!! An error occurred during the agent search !!!!!!!!")
+        print(f"Error for query '{query}': {e}")
+        import traceback
+        traceback.print_exc()
+        return []
