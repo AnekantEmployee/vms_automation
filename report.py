@@ -4,7 +4,7 @@ import streamlit as st
 from typing import Dict, Any, Tuple
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from utils.core_functions import combined_cve_search
+from cve_search.core_functions import combined_cve_search
 from utils.export_excel import export_results_to_excel
 import time
 import asyncio
@@ -12,7 +12,7 @@ import pandas as pd
 from typing import Dict, Any, Tuple, List
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from utils.core_functions import combined_cve_search
+from cve_search.core_functions import combined_cve_search
 from utils.remediation_agent import get_enhanced_remediation_data
 
 
