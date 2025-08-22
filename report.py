@@ -6,6 +6,15 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.core_functions import combined_cve_search
 from utils.export_excel import export_results_to_excel
+import time
+import asyncio
+import pandas as pd
+from typing import Dict, Any, Tuple, List
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from utils.core_functions import combined_cve_search
+from utils.remediation_agent import get_enhanced_remediation_data
+
 
 # Page configuration
 st.set_page_config(
@@ -98,8 +107,7 @@ def find_header_row(df: pd.DataFrame) -> int:
             return idx
     return -1
 
-
-def process_single_vulnerability(
+async def process_single_vulnerability_async(
     idx: int,
     row: pd.Series,
     title_col: str,
@@ -107,7 +115,7 @@ def process_single_vulnerability(
     header_row: int,
     max_results_per_vuln: int,
 ) -> Tuple[Dict[str, Any], str]:
-    """Process a single vulnerability row (worker function for parallel processing)"""
+    """Process a single vulnerability row with remediation for each CVE (async version)"""
     title = str(row.get(title_col, "")).strip()
     vuln_type = str(row.get(type_col, "")).strip() if type_col else "Unknown"
 
@@ -127,13 +135,43 @@ def process_single_vulnerability(
         if cve_results:
             severity_counts = {}
             total_score = score_count = 0
+            remediation_data = []
 
+            # Process each CVE and get remediation data
             for cve in cve_results:
                 severity = cve.severity.upper()
                 severity_counts[severity] = severity_counts.get(severity, 0) + 1
                 if cve.score > 0:
                     total_score += cve.score
                     score_count += 1
+                
+                # Get remediation data for this specific CVE
+                try:
+                    cve_remediation = await get_enhanced_remediation_data(
+                        {"original_data": original_data}, 
+                        cve
+                    )
+                    remediation_data.append({
+                        "cve_id": cve.cve_id,
+                        "remediation": cve_remediation
+                    })
+                except Exception as e:
+                    print(f"Error generating remediation for CVE {cve.cve_id}: {e}")
+                    # Fallback remediation data
+                    remediation_data.append({
+                        "cve_id": cve.cve_id,
+                        "remediation": {
+                            "Remediation Guide": f"Please refer to vendor documentation for CVE {cve.cve_id} remediation steps.",
+                            "Remediation Priority": "Medium",
+                            "Estimated Effort": "Manual assessment required",
+                            "Reference Links": f"https://nvd.nist.gov/vuln/detail/{cve.cve_id}",
+                            "Additional Resources": "https://nvd.nist.gov/",
+                            "Immediate Actions": "• Check for available patches\n• Monitor for exploitation attempts",
+                            "Detailed Steps": "1. Consult vendor security advisories\n2. Apply recommended patches",
+                            "Verification Steps": "• Verify patch installation\n• Test system functionality",
+                            "Rollback Plan": "• Maintain system backups\n• Test rollback procedure",
+                        }
+                    })
 
             result = {
                 "original_row": idx + header_row + 2,  # +2 for 0-based index + header
@@ -142,6 +180,7 @@ def process_single_vulnerability(
                 "type": vuln_type,
                 "cve_count": len(cve_results),
                 "cve_results": cve_results,
+                "remediation_data": remediation_data,  # New: Array of remediation data for each CVE
                 "severity_summary": severity_counts,
                 "avg_cvss_score": total_score / score_count if score_count > 0 else 0,
                 "highest_score": max(cve.score for cve in cve_results),
@@ -156,6 +195,7 @@ def process_single_vulnerability(
                 "type": vuln_type,
                 "cve_count": 0,
                 "cve_results": [],
+                "remediation_data": [],  # Empty array when no CVEs found
                 "severity_summary": {},
                 "avg_cvss_score": 0,
                 "highest_score": 0,
@@ -169,6 +209,50 @@ def process_single_vulnerability(
             "original_data": original_data,
             "title": title,
             "type": vuln_type,
+            "remediation_data": [],  # Empty array on error
+            "error": str(e),
+            "processed_at": datetime.now().isoformat(),
+        }
+        return error_result, "error"
+
+
+
+def process_single_vulnerability(
+    idx: int,
+    row: pd.Series,
+    title_col: str,
+    type_col: str,
+    header_row: int,
+    max_results_per_vuln: int,
+) -> Tuple[Dict[str, Any], str]:
+    """Synchronous wrapper for the async vulnerability processing function"""
+    try:
+        # Create new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            result = loop.run_until_complete(
+                process_single_vulnerability_async(
+                    idx, row, title_col, type_col, header_row, max_results_per_vuln
+                )
+            )
+            return result
+        finally:
+            loop.close()
+    except Exception as e:
+        print(f"Error in process_single_vulnerability: {e}")
+        # Create original row data for error case
+        original_data = {col: str(row.get(col, "")) for col in row.index}
+        title = str(row.get(title_col, "")).strip()
+        vuln_type = str(row.get(type_col, "")).strip() if type_col else "Unknown"
+        
+        error_result = {
+            "original_row": idx + header_row + 2,
+            "original_data": original_data,
+            "title": title,
+            "type": vuln_type,
+            "remediation_data": [],  # Empty array on error
             "error": str(e),
             "processed_at": datetime.now().isoformat(),
         }
@@ -178,7 +262,7 @@ def process_single_vulnerability(
 def process_vulnerability_report(
     df: pd.DataFrame, max_results_per_vuln: int = 3, max_workers: int = 5
 ) -> Dict[str, Any]:
-    """Process vulnerability report with parallel processing"""
+    """Process vulnerability report with parallel processing (updated for remediation)"""
 
     ChatInterface.add_message("🔍 Analyzing report structure...", "system")
     header_row = find_header_row(df)
@@ -204,7 +288,7 @@ def process_vulnerability_report(
         return None
 
     ChatInterface.add_message(
-        f"✅ Processing {len(df)} rows with {max_workers} parallel workers", "success"
+        f"✅ Processing {len(df)} rows with {max_workers} parallel workers (including AI remediation)", "success"
     )
 
     results = []
@@ -217,6 +301,7 @@ def process_vulnerability_report(
         "error": 0,
     }
 
+    import streamlit as st
     progress_placeholder = st.empty()
     progress_bar = st.progress(0)
     status_text = st.empty()
@@ -252,8 +337,9 @@ def process_vulnerability_report(
 
                 title = result["title"]
                 if status == "success":
+                    remediation_count = len(result.get("remediation_data", []))
                     ChatInterface.add_message(
-                        f"✅ Found {result['cve_count']} CVE(s) for '{title[:40]}...'",
+                        f"✅ Found {result['cve_count']} CVE(s) with {remediation_count} remediation guides for '{title[:40]}...'",
                         "success",
                     )
                 else:
@@ -269,9 +355,14 @@ def process_vulnerability_report(
             # Update progress
             progress = (i + 1) / len(futures)
             progress_bar.progress(progress)
+            
+            # Calculate total remediation guides generated
+            total_remediations = sum(len(r.get("remediation_data", [])) for r in results)
+            
             status_text.text(
                 f"Processed: {i+1}/{len(futures)} | "
                 f"CVEs Found: {sum(len(r['cve_results']) for r in results if 'cve_results' in r)} | "
+                f"Remediation Guides: {total_remediations} | "
                 f"Errors: {stats['error']}"
             )
 
@@ -282,11 +373,14 @@ def process_vulnerability_report(
 
     # Final summary
     total_cves = sum(len(r["cve_results"]) for r in results)
+    total_remediations = sum(len(r.get("remediation_data", [])) for r in results)
+    
     ChatInterface.add_message(
         f"🎯 Complete! Processed: {stats['processed']}, "
         f"Skipped: {stats['skipped_empty'] + stats['skipped_type']}, "
         f"Errors: {stats['error']}, "
-        f"Total CVEs Found: {total_cves}",
+        f"Total CVEs Found: {total_cves}, "
+        f"Remediation Guides Generated: {total_remediations}",
         "success",
     )
 
@@ -299,8 +393,10 @@ def process_vulnerability_report(
             "skipped": stats["skipped_empty"] + stats["skipped_type"],
             "errors": stats["error"],
             "total_cves_found": total_cves,
+            "total_remediations_generated": total_remediations,
         },
     }
+
 
 
 def main():
