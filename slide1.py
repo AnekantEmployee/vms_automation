@@ -3,7 +3,7 @@ from pptx.enum.text import PP_ALIGN
 from pptx.dml.color import RGBColor
 from pptx.util import Inches, Pt, Cm
 from pptx.enum.text import MSO_ANCHOR
-from pptx.enum.shapes import MSO_SHAPE
+from pptx.enum.text import PP_ALIGN, MSO_ANCHOR, MSO_AUTO_SIZE
 from ppt_data import DARK_BLUE, LIGHT_SKY_BLUE, YELLOW, VULNERABILITIES
 
 
@@ -126,7 +126,7 @@ def add_yellow_box_custom_corners(slide):
         border_width: Border thickness
     """
     x=Cm(0.5)
-    y=Cm(11.25)
+    y=Cm(11.15)
     width=Cm(8)
     height=Cm(3.5)
     top_right_radius=22
@@ -179,13 +179,20 @@ def add_yellow_box_custom_corners(slide):
                 </a:pathLst>
             </a:custGeom>
             <a:solidFill>
-                <a:srgbClr val="FFFF00"/>
+                <a:srgbClr val="FFC000"/>
             </a:solidFill>
             <a:ln w="{int(border_width.emu)}">
                 <a:solidFill>
-                    <a:srgbClr val="FFFF00"/>
+                    <a:srgbClr val="FFC000"/>
                 </a:solidFill>
             </a:ln>
+            <a:effectLst>
+                <a:outerShdw blurRad="76200" dist="38100" dir="2700000" rotWithShape="0">
+                    <a:srgbClr val="000000">
+                        <a:alpha val="40000"/>
+                    </a:srgbClr>
+                </a:outerShdw>
+            </a:effectLst>
         </p:spPr>
         <p:txBody>
             <a:bodyPr/>
@@ -198,7 +205,164 @@ def add_yellow_box_custom_corners(slide):
     shape_element = parse_xml(shape_xml)
     slide.shapes._spTree.append(shape_element)
     
+    # Create main textbox
+    textbox = slide.shapes.add_textbox(x, y, width, height)
+    textbox.fill.background()  # Transparent fill
+    textbox.line.fill.background()  # Transparent border
+
+    # Access the text frame
+    text_frame = textbox.text_frame
+    text_frame.margin_left = Cm(0.3)  # Small margin
+    text_frame.margin_right = Cm(0.2)
+    text_frame.margin_top = Cm(0.1)
+    text_frame.margin_bottom = Cm(0.1)
+    text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE  # Vertical center
+    text_frame.auto_size = MSO_AUTO_SIZE.NONE
+    text_frame.word_wrap = False  # Disable word wrap for table-like layout
+
+    # Clear default paragraph
+    text_frame.clear()
+
+    # Calculate half width for positioning
+    half_width = width / 2
+
+    # Method 1: Using two separate textboxes (Recommended)
+    # Left textbox (50% width)
+    left_textbox = slide.shapes.add_textbox(x, y, half_width, height)
+    left_textbox.fill.background()  # Transparent fill
+    left_textbox.line.fill.background()  # Transparent border
+
+    left_text_frame = left_textbox.text_frame
+    left_text_frame.margin_left = Cm(0.3)
+    left_text_frame.margin_right = Cm(0.2)
+    left_text_frame.margin_top = Cm(0.1)
+    left_text_frame.margin_bottom = Cm(0.1)
+    left_text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+    left_text_frame.auto_size = MSO_AUTO_SIZE.NONE
+    left_text_frame.word_wrap = True
+
+    # Clear and add content to left textbox
+    left_text_frame.clear()
+    left_paragraph = left_text_frame.paragraphs[0]
+    left_paragraph.alignment = PP_ALIGN.LEFT  # Changed to LEFT alignment
+
+    # Add "Your Risk Score" text
+    left_title_run = left_paragraph.add_run()
+    left_title_run.text = "Your Risk Score"
+    left_title_run.font.size = Pt(20)
+    left_title_run.font.color.rgb = RGBColor(0, 0, 0)  # Black text
+
+    # Add line break
+    left_paragraph.add_run().text = "\n"
+
+    # Add "63" text
+    left_score_run = left_paragraph.add_run()
+    left_score_run.text = "63"
+    left_score_run.font.size = Pt(38)  # Larger font for the score
+    left_score_run.font.bold = True
+    left_score_run.font.color.rgb = RGBColor(0, 0, 0)  # Black text
+
+    # Right textbox (50% width)
+    right_textbox = slide.shapes.add_textbox(x + half_width, y, half_width, height)
+    right_textbox.fill.background()  # Transparent fill
+    right_textbox.line.fill.background()  # Transparent border
+
+    right_text_frame = right_textbox.text_frame
+    right_text_frame.margin_left = Cm(0.3)
+    right_text_frame.margin_right = Cm(0.2)
+    right_text_frame.margin_top = Cm(0.1)
+    right_text_frame.margin_bottom = Cm(0.1)
+    right_text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+    right_text_frame.auto_size = MSO_AUTO_SIZE.NONE
+    right_text_frame.word_wrap = True
+
+    # Clear and add content to right textbox
+    right_text_frame.clear()
+    right_paragraph = right_text_frame.paragraphs[0]
+    right_paragraph.alignment = PP_ALIGN.LEFT  # Changed to LEFT alignment
+
+    # Add right content (example)
+    right_title_run = right_paragraph.add_run()
+    right_title_run.text = "Industry Average"
+    right_title_run.font.size = Pt(20)
+    right_title_run.font.color.rgb = RGBColor(0, 0, 0)  # Black text
+
+    # Add line break
+    right_paragraph.add_run().text = "\n"
+
+    # Add right score
+    right_score_run = right_paragraph.add_run()
+    right_score_run.text = "45"
+    right_score_run.font.size = Pt(38)  # Larger font for the score
+    right_score_run.font.bold = True
+    right_score_run.font.color.rgb = RGBColor(0, 0, 0)  # Black text
+
+    # Optional: Group the textboxes together
+    # Note: You'll need to remove the original textbox if you're using this method
+    try:
+        # Remove the original textbox if it was created
+        sp = slide.shapes._spTree
+        sp.remove(textbox._element)
+    except:
+        pass
+    
     return slide.shapes[-1]
+
+def add_transparent_box_with_text(slide, heading, text, x, y, width, height):
+    """
+    Add a transparent box with heading and text content
+    
+    Args:
+        slide: PowerPoint slide object
+        heading: Header text string
+        text: Main content text string  
+        x: X position (use Cm() or Inches())
+        y: Y position (use Cm() or Inches())
+        width: Box width (use Cm() or Inches())
+        height: Box height (use Cm() or Inches())
+    """
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.util import Cm, Inches
+    
+    # Add transparent rectangle shape
+    shape = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE, x, y, width, height
+    )
+    
+    # Make shape completely transparent by removing fill
+    fill = shape.fill
+    fill.background()  # This removes the fill entirely
+    
+    # Remove the outline/border
+    line = shape.line
+    line.fill.background()
+
+    # Add heading text box inside the transparent box
+    txBox_heading = slide.shapes.add_textbox(
+        x, y, width, Cm(1.2)
+    )
+    tf_heading = txBox_heading.text_frame
+    p_heading = tf_heading.paragraphs[0]
+    run_heading = p_heading.add_run()
+    run_heading.text = heading
+    run_heading.font.bold = True
+    run_heading.font.size = Inches(0.3)  # Approximately 24pt
+    run_heading.font.color.rgb = RGBColor(0, 0, 0)  # Black text
+
+    # Add main text box inside the transparent box
+    txBox_text = slide.shapes.add_textbox(
+        x, y + Cm(1), width, height
+    )
+    tf_text = txBox_text.text_frame
+    tf_text.word_wrap = True  # Enable word wrapping
+    p_text = tf_text.paragraphs[0]
+    run_text = p_text.add_run()
+    run_text.text = text
+    run_text.font.size = Inches(0.2)  # Approximately 16pt
+    run_text.font.color.rgb = RGBColor(0, 0, 0)  # Black text
+    
+    return shape
 
 def create_blank_slide_with_background(p, img_path, top_right_img_path='ppt-generation/bg/yash-logo.png', margin=40):
     # Add slide with blank layout
@@ -221,13 +385,12 @@ def create_blank_slide_with_background(p, img_path, top_right_img_path='ppt-gene
         left_pos = p.slide_width - width_emu - margin_emu
         top_pos = margin_emu
         
-        top_right_pic = slide.shapes.add_picture(
+        slide.shapes.add_picture(
             top_right_img_path, left_pos, top_pos, 
             width=width_emu, height=height_emu
         )
     
-    # Example: Custom positioning for vulnerability content
-    content_cfg = {
+    add_vulnerability_content(slide, VULNERABILITIES, content_cfg={
         'x': Inches(0),
         'y': Cm(14.75),
         'width': Cm(21),
@@ -238,11 +401,22 @@ def create_blank_slide_with_background(p, img_path, top_right_img_path='ppt-gene
         'text_left_offset': Inches(1.1),
         'text_width_ratio': 0.8,
         'items_spacing': Inches(0),
-    }
-
-    add_vulnerability_content(slide, VULNERABILITIES, content_cfg=content_cfg)
+    })
     
-    # Basic yellow box
+    heading = "Cybersecurity Executive Brief​"
+    text = ("Honestycar faces significant cybersecurity risks like improper input validation, weak ciphers, "
+            "and insecure file upload functionality and network vulnerabilities. These weaknesses pose "
+            "significant risks to data integrity, confidentiality, and business operations.​")
+    add_transparent_box_with_text(
+        slide, 
+        heading, 
+        text, 
+        x=Cm(0.5),      # Adjust X position
+        y=Cm(6.5),      # Adjust Y position  
+        width=Cm(12), # Adjust width
+        height=Cm(4)
+    )
+    
     add_yellow_box_custom_corners(slide)
     
     return slide
