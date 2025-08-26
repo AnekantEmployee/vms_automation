@@ -35,7 +35,7 @@ def create_header(slide, text, left=Cm(1), top=Cm(1), width=Cm(6), height=Cm(0.9
 def create_yash_recommendations_section(slide, RECOMMENDATIONS_DATA):
     """
     Create the "YASH Recommendations - Why Learn More?" section (40% width on right side)
-    with proper blue circular icons
+    with proper blue circular icons using images instead of emojis
     """
     # Fixed positioning to match the "What's in it for you?" section
     recommendations_left = Cm(12.5)  # Position on right side
@@ -91,22 +91,59 @@ def create_yash_recommendations_section(slide, RECOMMENDATIONS_DATA):
         circle.fill.fore_color.rgb = LIGHT_BLUE
         circle.line.fill.background()  # Remove border
  
-        # Add icon text in center of circle
-        icon_box = slide.shapes.add_textbox(
-            circle_left, circle_top, circle_size, circle_size
-        )
- 
-        icon_frame = icon_box.text_frame
-        icon_frame.margin_left = 0
-        icon_frame.margin_right = 0
-        icon_frame.margin_top = Cm(0.25)
-        icon_frame.margin_bottom = 0
-        icon_para = icon_frame.paragraphs[0]
-        icon_para.alignment = PP_ALIGN.CENTER
-        icon_run = icon_para.add_run()
-        icon_run.text = rec['icon']
-        icon_run.font.size = Cm(0.5)
-        icon_run.font.bold = True  # Make icon bold
+        # Add image icon in center of circle (if image path is provided)
+        if 'image_path' in rec and rec['image_path']:
+            # Calculate centered position for image within circle
+            image_size = Cm(rec.get('image_size', 0.7))  # Default image size
+            image_left = circle_left + (circle_size - image_size) / 2
+            image_top = circle_top + (circle_size - image_size) / 2
+            
+            try:
+                # Add the image
+                image_shape = slide.shapes.add_picture(
+                    rec['image_path'], 
+                    image_left, 
+                    image_top, 
+                    width=image_size, 
+                    height=image_size
+                )
+                
+                # Optional: Make image background transparent if needed
+                # This depends on the image format and PowerPoint version
+                
+            except Exception as e:
+                # Fallback to text icon if image fails to load
+                print(f"Failed to load image {rec['image_path']}: {e}")
+                icon_box = slide.shapes.add_textbox(
+                    circle_left, circle_top, circle_size, circle_size
+                )
+                icon_frame = icon_box.text_frame
+                icon_frame.margin_left = 0
+                icon_frame.margin_right = 0
+                icon_frame.margin_top = Cm(0.25)
+                icon_frame.margin_bottom = 0
+                icon_para = icon_frame.paragraphs[0]
+                icon_para.alignment = PP_ALIGN.CENTER
+                icon_run = icon_para.add_run()
+                icon_run.text = rec.get('fallback_icon', '⚙️')
+                icon_run.font.size = Cm(0.5)
+                icon_run.font.bold = True
+        else:
+            # Fallback to text icon if no image path provided
+            icon_box = slide.shapes.add_textbox(
+                circle_left, circle_top, circle_size, circle_size
+            )
+            icon_frame = icon_box.text_frame
+            icon_frame.margin_left = 0
+            icon_frame.margin_right = 0
+            icon_frame.margin_top = Cm(0.25)
+            icon_frame.margin_bottom = 0
+            icon_para = icon_frame.paragraphs[0]
+            icon_para.alignment = PP_ALIGN.CENTER
+            icon_run = icon_para.add_run()
+            icon_run.text = rec.get('icon', '⚙️')
+            icon_run.font.size = Cm(0.5)
+            icon_run.font.bold = True
  
         # Add title and subtitle text next to circle
         text_left = circle_left + circle_size + Cm(0.5)
