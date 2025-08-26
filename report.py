@@ -1,18 +1,12 @@
 import time
+import asyncio
 import pandas as pd
 import streamlit as st
 from typing import Dict, Any, Tuple
 from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from cve_search.core_functions import combined_cve_search
 from utils.export_excel import export_results_to_excel
-import time
-import asyncio
-import pandas as pd
-from typing import Dict, Any, Tuple, List
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from cve_search.core_functions import combined_cve_search
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.remediation_agent import get_enhanced_remediation_data
 
 
@@ -131,6 +125,8 @@ async def process_single_vulnerability_async(
 
         # Create original row data dictionary (all columns from original report)
         original_data = {col: str(row.get(col, "")) for col in row.index}
+        
+        print(original_data, cve_results)
 
         if cve_results:
             severity_counts = {}

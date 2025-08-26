@@ -308,6 +308,135 @@ def add_yellow_box_custom_corners(slide):
     
     return slide.shapes[-1]
 
+def add_blue_box_custom_corners(slide):
+    """
+    Create a blue box with only top-left corner rounded using XML manipulation
+    
+    Args:
+        slide: PowerPoint slide object
+    """
+    x=Cm(11)
+    y=Cm(4)
+    width=Cm(10)
+    height=Cm(5.55)
+    top_left_radius=22
+    border_width=Inches(0.02)
+    
+    # Convert measurements to EMU (English Metric Units)
+    x_emu = x.emu
+    y_emu = y.emu
+    width_emu = width.emu
+    height_emu = height.emu
+    radius_emu = top_left_radius * 9525  # Convert pixels to EMU
+    
+    # Create custom shape XML with top-left corner rounded
+    shape_xml = f'''
+    <p:sp xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
+          xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+        <p:nvSpPr>
+            <p:cNvPr id="1" name="CustomBlueBox"/>
+            <p:cNvSpPr/>
+            <p:nvPr/>
+        </p:nvSpPr>
+        <p:spPr>
+            <a:xfrm>
+                <a:off x="{x_emu}" y="{y_emu}"/>
+                <a:ext cx="{width_emu}" cy="{height_emu}"/>
+            </a:xfrm>
+            <a:custGeom>
+                <a:avLst/>
+                <a:gdLst/>
+                <a:ahLst/>
+                <a:cxnLst/>
+                <a:rect l="0" t="0" r="{width_emu}" b="{height_emu}"/>
+                <a:pathLst>
+                    <a:path w="{width_emu}" h="{height_emu}">
+                        <a:moveTo>
+                            <a:pt x="{radius_emu}" y="0"/>
+                        </a:moveTo>
+                        <a:lnTo>
+                            <a:pt x="{width_emu}" y="0"/>
+                        </a:lnTo>
+                        <a:lnTo>
+                            <a:pt x="{width_emu}" y="{height_emu}"/>
+                        </a:lnTo>
+                        <a:lnTo>
+                            <a:pt x="0" y="{height_emu}"/>
+                        </a:lnTo>
+                        <a:lnTo>
+                            <a:pt x="0" y="{radius_emu}"/>
+                        </a:lnTo>
+                        <a:arcTo wR="{radius_emu}" hR="{radius_emu}" stAng="10800000" swAng="5400000"/>
+                        <a:close/>
+                    </a:path>
+                </a:pathLst>
+            </a:custGeom>
+            <a:solidFill>
+                <a:srgbClr val="00B0F0"/>
+            </a:solidFill>
+            <a:ln w="{int(border_width.emu)}">
+                <a:solidFill>
+                    <a:srgbClr val="00B0F0"/>
+                </a:solidFill>
+            </a:ln>
+            <a:effectLst>
+                <a:outerShdw blurRad="76200" dist="38100" dir="2700000" rotWithShape="0">
+                    <a:srgbClr val="000000">
+                        <a:alpha val="40000"/>
+                    </a:srgbClr>
+                </a:outerShdw>
+            </a:effectLst>
+        </p:spPr>
+        <p:txBody>
+            <a:bodyPr/>
+            <a:lstStyle/>
+            <a:p/>
+        </p:txBody>
+    </p:sp>'''
+    
+    # Parse and add the custom shape
+    shape_element = parse_xml(shape_xml)
+    slide.shapes._spTree.append(shape_element)
+    
+    # Adjust y position for bottom positioning of text (move text to lower 60% of box)
+    text_y_offset = Cm(0)  # Move text down from top
+    text_height = height - text_y_offset  # Remaining height for text
+    
+    # Left textbox (50% width) - positioned in bottom part
+    left_textbox = slide.shapes.add_textbox(x, y, width, text_height)
+    left_textbox.fill.background()  # Transparent fill
+    left_textbox.line.fill.background()  # Transparent border
+
+    left_text_frame = left_textbox.text_frame
+    left_text_frame.margin_left = Cm(0.3)
+    left_text_frame.margin_right = Cm(0.2)
+    left_text_frame.margin_top = Cm(0)
+    left_text_frame.margin_bottom = Cm(0.2)
+    left_text_frame.word_wrap = True
+
+    # Clear and add content to left textbox
+    left_text_frame.clear()
+    left_paragraph = left_text_frame.paragraphs[0]
+    left_paragraph.alignment = PP_ALIGN.LEFT
+
+    # Add "Your Risk Score" text
+    left_title_run = left_paragraph.add_run()
+    left_title_run.text = "Honestycar Security Intelligence Report"
+    left_title_run.font.bold = True
+    left_title_run.font.size = Pt(28)  # Slightly smaller to fit better
+    left_title_run.font.color.rgb = RGBColor(0, 0, 0)  # White text for blue background
+
+    # Add line break
+    left_paragraph.add_run().text = "\n"
+
+    # Add "63" text
+    left_score_run = left_paragraph.add_run()
+    left_score_run.text = "An external perspective, emulating the tactics and techniques employed by real-world attackers using passive reconnaissance to identify potential vulnerabilities that cybercriminals could exploit "
+    left_score_run.font.size = Pt(14)  # Large font for the score
+    left_score_run.font.color.rgb = RGBColor(0, 0, 0)  # White text for blue background
+
+    return slide.shapes[-1]
+
 def add_transparent_box_with_text(slide, heading, text, x, y, width, height):
     """
     Add a transparent box with heading and text content
@@ -412,11 +541,13 @@ def create_blank_slide_with_background(p, img_path, top_right_img_path='ppt-gene
         heading, 
         text, 
         x=Cm(0.5),      # Adjust X position
-        y=Cm(6.5),      # Adjust Y position  
-        width=Cm(12), # Adjust width
+        y=Cm(5.5),      # Adjust Y position  
+        width=Cm(10), # Adjust width
         height=Cm(4)
     )
     
     add_yellow_box_custom_corners(slide)
+    
+    add_blue_box_custom_corners(slide)
     
     return slide
