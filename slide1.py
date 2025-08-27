@@ -318,7 +318,7 @@ def add_blue_box_custom_corners(slide):
     x=Cm(11)
     y=Cm(4)
     width=Cm(10)
-    height=Cm(5.55)
+    height=Cm(4.9)
     top_left_radius=22
     border_width=Inches(0.02)
     
@@ -399,11 +399,11 @@ def add_blue_box_custom_corners(slide):
     slide.shapes._spTree.append(shape_element)
     
     # Adjust y position for bottom positioning of text (move text to lower 60% of box)
-    text_y_offset = Cm(0)  # Move text down from top
+    text_y_offset = Cm(0.5)  # Move text down from top
     text_height = height - text_y_offset  # Remaining height for text
     
     # Left textbox (50% width) - positioned in bottom part
-    left_textbox = slide.shapes.add_textbox(x, y, width, text_height)
+    left_textbox = slide.shapes.add_textbox(x+Cm(0.05), y, width, text_height)
     left_textbox.fill.background()  # Transparent fill
     left_textbox.line.fill.background()  # Transparent border
 
@@ -429,10 +429,10 @@ def add_blue_box_custom_corners(slide):
     # Add line break
     left_paragraph.add_run().text = "\n"
 
-    # Add "63" text
+    # Add text
     left_score_run = left_paragraph.add_run()
     left_score_run.text = "An external perspective, emulating the tactics and techniques employed by real-world attackers using passive reconnaissance to identify potential vulnerabilities that cybercriminals could exploit "
-    left_score_run.font.size = Pt(14)  # Large font for the score
+    left_score_run.font.size = Pt(13)  # Large font for the score
     left_score_run.font.color.rgb = RGBColor(0, 0, 0)  # White text for blue background
 
     return slide.shapes[-1]
@@ -488,10 +488,13 @@ def add_transparent_box_with_text(slide, heading, text, x, y, width, height):
     p_text = tf_text.paragraphs[0]
     run_text = p_text.add_run()
     run_text.text = text
-    run_text.font.size = Inches(0.2)  # Approximately 16pt
+    run_text.font.size = Pt(13)  # Approximately 16pt
     run_text.font.color.rgb = RGBColor(0, 0, 0)  # Black text
     
     return shape
+
+def add_riskometer(slide):
+    return slide
 
 def create_blank_slide_with_background(p, img_path, top_right_img_path='ppt-generation/bg/yash-logo.png', margin=40):
     # Add slide with blank layout
@@ -541,13 +544,13 @@ def create_blank_slide_with_background(p, img_path, top_right_img_path='ppt-gene
         heading, 
         text, 
         x=Cm(0.5),      # Adjust X position
-        y=Cm(5.5),      # Adjust Y position  
+        y=Cm(6.25),      # Adjust Y position  
         width=Cm(10), # Adjust width
         height=Cm(4)
     )
     
     add_yellow_box_custom_corners(slide)
-    
     add_blue_box_custom_corners(slide)
+    add_riskometer(slide)
     
     return slide
