@@ -5,15 +5,17 @@ from typing import Dict, Any, List
 from .export_utils import determine_severity_score, get_days_diff, is_nan, clean_value, simplify_date, determine_sla_status
 
 
+
 def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
-    """Export with original report data and remediation guidance for each CVE"""
+    """Export with original report data, risk assessment, and remediation guidance for each CVE"""
     output = io.BytesIO()
 
     try:
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            # Enhanced detailed results with original data and remediation
+            # Enhanced detailed results with original data, risk assessment, and remediation
             detailed_rows = []
             remediation_summary_rows = []
+            risk_assessment_summary_rows = []
 
             for result in processed_data.get("results", []):
                 try:
@@ -67,12 +69,19 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
 
                     cve_results = result.get("cve_results", [])
                     remediation_data = result.get("remediation_data", [])
+                    risk_assessment_data = result.get("risk_assessment_data", [])
                     
-                    # Create a mapping of CVE ID to remediation data for easy lookup
+                    # Create mappings for easy lookup
                     remediation_map = {}
+                    risk_assessment_map = {}
+                    
                     for rem_data in remediation_data:
                         if isinstance(rem_data, dict) and "cve_id" in rem_data:
                             remediation_map[rem_data["cve_id"]] = rem_data.get("remediation", {})
+                    
+                    for risk_data in risk_assessment_data:
+                        if isinstance(risk_data, dict) and "cve_id" in risk_data:
+                            risk_assessment_map[risk_data["cve_id"]] = risk_data.get("risk_assessment", {})
 
                     if cve_results:
                         for i, cve in enumerate(cve_results, 1):
@@ -106,8 +115,16 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                             else:
                                 products_string = clean_value(affected_products)
                             
-                            # Get remediation data for this CVE
+                            # Get remediation and risk assessment data for this CVE
                             remediation = remediation_map.get(cve_id, {})
+                            risk_assessment = risk_assessment_map.get(cve_id, {})
+                            
+                            # Format immediate actions for better display
+                            immediate_actions = risk_assessment.get("immediate_actions", [])
+                            if isinstance(immediate_actions, list):
+                                immediate_actions_text = "\n".join(immediate_actions)
+                            else:
+                                immediate_actions_text = clean_value(immediate_actions)
                             
                             row.update({
                                 "CVE": cve_id,
@@ -125,6 +142,12 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                 "CVE_Vector_String": clean_value(getattr(cve, "vector_string", "")),
                                 "CVE_CWE_Info": cwe_string,
                                 "CVE_Affected_Products": products_string,
+                                # Add risk assessment columns
+                                "Risk_Category": clean_value(risk_assessment.get("risk_category", "")),
+                                "Risk_Details": clean_value(risk_assessment.get("risk_details", "")),
+                                "Business_Impact": clean_value(risk_assessment.get("business_impact", "")),
+                                "Remediation_Urgency": clean_value(risk_assessment.get("remediation_urgency", "")),
+                                "Risk_Immediate_Actions": immediate_actions_text,
                                 # Add remediation columns
                                 "Remediation_Guide": clean_value(remediation.get("Remediation Guide", "")),
                                 "Remediation_Priority": clean_value(remediation.get("Remediation Priority", "")),
@@ -158,6 +181,24 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                     "Additional_Resources": clean_value(remediation.get("Additional Resources", "")),
                                 }
                                 remediation_summary_rows.append(remediation_summary)
+                            
+                            # Create risk assessment summary row for separate sheet
+                            if risk_assessment:
+                                risk_summary = {
+                                    "Asset_IP": clean_value(original_data.get("IP")),
+                                    "QID": clean_value(original_data.get("QID")),
+                                    "Vulnerability_Title": clean_value(original_data.get("Title")),
+                                    "CVE_ID": cve_id,
+                                    "CVE_Severity": clean_value(getattr(cve, "severity", "")),
+                                    "CVSS_Score": round(cve_score, 2),
+                                    "Risk_Category": clean_value(risk_assessment.get("risk_category", "")),
+                                    "Risk_Score": clean_value(risk_assessment.get("risk_score", "")),
+                                    "Risk_Details": clean_value(risk_assessment.get("risk_details", "")),
+                                    "Business_Impact": clean_value(risk_assessment.get("business_impact", "")),
+                                    "Remediation_Urgency": clean_value(risk_assessment.get("remediation_urgency", "")),
+                                    "Immediate_Actions": immediate_actions_text,
+                                }
+                                risk_assessment_summary_rows.append(risk_summary)
                     else:
                         # Add base row even if no CVEs found
                         base_row.update({
@@ -172,6 +213,13 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                             "CVE_Vector_String": "",
                             "CVE_CWE_Info": "",
                             "CVE_Affected_Products": "",
+                            # Empty risk assessment columns
+                            "Risk_Category": "",
+                            "Risk_Score": "",
+                            "Risk_Details": "",
+                            "Business_Impact": "",
+                            "Remediation_Urgency": "",
+                            "Risk_Immediate_Actions": "",
                             # Empty remediation columns
                             "Remediation_Guide": "",
                             "Remediation_Priority": "",
@@ -225,6 +273,21 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                 empty_remediation_df = pd.DataFrame([{"Message": "No remediation data available"}])
                 empty_remediation_df.to_excel(writer, sheet_name="Remediation_Guide", index=False)
 
+            # Create Risk Assessment Summary sheet
+            if risk_assessment_summary_rows:
+                risk_df = pd.DataFrame(risk_assessment_summary_rows)
+                risk_df = risk_df.fillna("")
+                
+                # Additional cleaning for risk assessment data
+                for col in risk_df.columns:
+                    risk_df[col] = risk_df[col].astype(str).replace(['nan', 'None', 'NaT'], '')
+                
+                risk_df.to_excel(writer, sheet_name="Risk_Assessment", index=False)
+            else:
+                # Create empty risk assessment sheet
+                empty_risk_df = pd.DataFrame([{"Message": "No risk assessment data available"}])
+                empty_risk_df.to_excel(writer, sheet_name="Risk_Assessment", index=False)
+
             # Create Summary Statistics sheet
             create_summary_sheet(writer, processed_data, detailed_rows)
             
@@ -243,6 +306,7 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
     return output
 
 
+
 def create_summary_sheet(writer, processed_data: Dict[str, Any], detailed_rows: List[Dict]):
     """Create a summary statistics sheet"""
     try:
@@ -252,6 +316,7 @@ def create_summary_sheet(writer, processed_data: Dict[str, Any], detailed_rows: 
         summary_data.append({"Metric": "Total Vulnerabilities Processed", "Value": len(processed_data.get("results", []))})
         summary_data.append({"Metric": "Total CVEs Found", "Value": processed_data.get("summary", {}).get("total_cves_found", 0)})
         summary_data.append({"Metric": "Total Remediation Guides Generated", "Value": processed_data.get("summary", {}).get("total_remediations_generated", 0)})
+        summary_data.append({"Metric": "Total Risk Assessments Generated", "Value": len([row for row in detailed_rows if row.get("Risk_Category")])})
         
         # Severity breakdown
         critical_count = len([row for row in detailed_rows if row.get("CVE_Severity", "").upper() == "CRITICAL"])
@@ -266,13 +331,35 @@ def create_summary_sheet(writer, processed_data: Dict[str, Any], detailed_rows: 
             {"Metric": "Low Severity CVEs", "Value": low_count}
         ])
         
-        # CVSS score statistics
+        # Risk category breakdown
+        risk_critical_count = len([row for row in detailed_rows if row.get("Risk_Category", "").upper() == "CRITICAL"])
+        risk_high_count = len([row for row in detailed_rows if row.get("Risk_Category", "").upper() == "HIGH"])
+        risk_medium_count = len([row for row in detailed_rows if row.get("Risk_Category", "").upper() == "MEDIUM"])
+        risk_low_count = len([row for row in detailed_rows if row.get("Risk_Category", "").upper() == "LOW"])
+        
+        summary_data.extend([
+            {"Metric": "Critical Risk Category", "Value": risk_critical_count},
+            {"Metric": "High Risk Category", "Value": risk_high_count},
+            {"Metric": "Medium Risk Category", "Value": risk_medium_count},
+            {"Metric": "Low Risk Category", "Value": risk_low_count}
+        ])
+        
+        # CVSS and Risk score statistics
         cvss_scores = [float(row.get("CVE_CVSS_Score", 0)) for row in detailed_rows if row.get("CVE_CVSS_Score")]
+        risk_scores = [float(row.get("Risk_Score", 0)) for row in detailed_rows if row.get("Risk_Score") and str(row.get("Risk_Score")).replace('.','').isdigit()]
+        
         if cvss_scores:
             summary_data.extend([
                 {"Metric": "Average CVSS Score", "Value": round(sum(cvss_scores) / len(cvss_scores), 2)},
                 {"Metric": "Highest CVSS Score", "Value": max(cvss_scores)},
                 {"Metric": "Lowest CVSS Score", "Value": min(cvss_scores)}
+            ])
+        
+        if risk_scores:
+            summary_data.extend([
+                {"Metric": "Average Risk Score", "Value": round(sum(risk_scores) / len(risk_scores), 2)},
+                {"Metric": "Highest Risk Score", "Value": max(risk_scores)},
+                {"Metric": "Lowest Risk Score", "Value": min(risk_scores)}
             ])
         
         # Priority breakdown
@@ -297,6 +384,7 @@ def create_summary_sheet(writer, processed_data: Dict[str, Any], detailed_rows: 
         error_df.to_excel(writer, sheet_name="Summary_Statistics", index=False)
 
 
+
 def create_priority_matrix_sheet(writer, detailed_rows: List[Dict]):
     """Create a priority matrix for remediation planning"""
     try:
@@ -304,7 +392,7 @@ def create_priority_matrix_sheet(writer, detailed_rows: List[Dict]):
         
         # Group by priority and effort
         for row in detailed_rows:
-            if row.get("CVE") and row.get("Remediation_Priority"):  # Only include rows with CVEs and remediation
+            if row.get("CVE") and (row.get("Remediation_Priority") or row.get("Risk_Category")):  # Include rows with CVEs and either remediation or risk data
                 priority_data.append({
                     "Asset_IP": row.get("Asset IPV4", ""),
                     "QID": row.get("QID", ""),
@@ -312,7 +400,10 @@ def create_priority_matrix_sheet(writer, detailed_rows: List[Dict]):
                     "Vulnerability_Title": row.get("Title", "")[:50],  # Truncate for readability
                     "CVE_Severity": row.get("CVE_Severity", ""),
                     "CVSS_Score": row.get("CVE_CVSS_Score", 0),
+                    "Risk_Category": row.get("Risk_Category", ""),
+                    "Risk_Score": row.get("Risk_Score", ""),
                     "Remediation_Priority": row.get("Remediation_Priority", ""),
+                    "Remediation_Urgency": row.get("Remediation_Urgency", ""),
                     "Estimated_Effort": row.get("Estimated_Effort", ""),
                     "SLA_Status": row.get("SLA Status", ""),
                     "First_Detected": row.get("First Detected", ""),
@@ -320,9 +411,12 @@ def create_priority_matrix_sheet(writer, detailed_rows: List[Dict]):
                 })
         
         if priority_data:
-            # Sort by priority (Critical, High, Medium, Low) and then by CVSS score
+            # Sort by risk category first, then remediation priority, then by CVSS score
+            risk_order = {"Critical": 1, "High": 2, "Medium": 3, "Low": 4}
             priority_order = {"Critical": 1, "High": 2, "Medium": 3, "Low": 4}
+            
             priority_data.sort(key=lambda x: (
+                risk_order.get(x["Risk_Category"], 5),
                 priority_order.get(x["Remediation_Priority"], 5),
                 -float(x["CVSS_Score"]) if x["CVSS_Score"] else 0
             ))

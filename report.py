@@ -8,6 +8,7 @@ from utils.export_excel import export_results_to_excel
 from cve_search.core_functions import combined_cve_search
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.remediation_agent import get_enhanced_remediation_data
+from utils.risk_assessment import get_vulnerability_risk_assessment
 
 
 # Page configuration
@@ -110,29 +111,27 @@ async def process_single_vulnerability_async(
     max_results_per_vuln: int,
 ) -> Tuple[Dict[str, Any], str]:
     """Process a single vulnerability row with remediation for each CVE (async version)"""
+    
     title = str(row.get(title_col, "")).strip()
     vuln_type = str(row.get(type_col, "")).strip() if type_col else "Unknown"
-
+    
     if not title or title == "nan":
         return None, "skipped_empty"
-
+    
     # Skip if type column exists and doesn't contain "vuln" or "ig" (case-insensitive)
     if type_col and not any(keyword in vuln_type.lower() for keyword in ["vuln", "ig"]):
         return None, "skipped_type"
-
+    
     try:
         cve_results = combined_cve_search(title, max_results_per_vuln)
-
-        # Create original row data dictionary (all columns from original report)
         original_data = {col: str(row.get(col, "")) for col in row.index}
         
-        print(original_data, cve_results)
-
         if cve_results:
             severity_counts = {}
             total_score = score_count = 0
             remediation_data = []
-
+            risk_assessment_data = []  # New: Array for risk assessments
+            
             # Process each CVE and get remediation data
             for cve in cve_results:
                 severity = cve.severity.upper()
@@ -140,6 +139,53 @@ async def process_single_vulnerability_async(
                 if cve.score > 0:
                     total_score += cve.score
                     score_count += 1
+                
+                # Convert CVE object to dictionary format for risk assessment
+                cve_data = {
+                    "cve_id": cve.cve_id,
+                    "description": cve.description,
+                    "severity": cve.severity,
+                    "published_date": cve.published_date,
+                    "modified_date": cve.modified_date,
+                    "score": cve.score,
+                    "source": getattr(cve, 'source', 'Unknown'),
+                    "vuln_status": getattr(cve, 'vuln_status', 'Unknown'),
+                    "cwe_info": getattr(cve, 'cwe_info', []),
+                    "affected_products": getattr(cve, 'affected_products', []),
+                    "references": getattr(cve, 'references', []),
+                    "exploitability_score": getattr(cve, 'exploitability_score', 0.0),
+                    "impact_score": getattr(cve, 'impact_score', 0.0),
+                    "vector_string": getattr(cve, 'vector_string', ''),
+                    "cvss_version": getattr(cve, 'cvss_version', ''),
+                    "confidence_score": getattr(cve, 'confidence_score', 0.0)
+                }
+                
+                # Get risk assessment for this specific CVE
+                try:
+                    risk_assessment = await get_vulnerability_risk_assessment(original_data, cve_data)
+                    # risk_assessment_dict = risk_assessment.to_dict() if hasattr(risk_assessment, 'to_dict') else vars(risk_assessment)
+                    risk_assessment_data.append({
+                        "cve_id": cve.cve_id,
+                        "risk_assessment": risk_assessment
+                    })
+                except Exception as e:
+                    print(f"Error generating risk assessment for CVE {cve.cve_id}: {e}")
+                    # Fallback risk assessment data
+                    risk_assessment_data.append({
+                        "cve_id": cve.cve_id,
+                        "risk_assessment": {
+                            "risk_category": "Medium",
+                            "risk_score": 5.0,
+                            "risk_details": f"Risk assessment unavailable for CVE {cve.cve_id}",
+                            "business_impact": "Potential security exposure requiring assessment",
+                            "remediation_urgency": "📅 Standard Priority (2 weeks)",
+                            "immediate_actions": [
+                                "🔒 Step 1: Apply latest security patches and updates",
+                                "⚙️ Step 2: Review and harden system configurations", 
+                                "📊 Step 3: Enable security monitoring and alerting"
+                            ]
+                        }
+                    })
                 
                 # Get remediation data for this specific CVE
                 try:
@@ -162,13 +208,13 @@ async def process_single_vulnerability_async(
                             "Estimated Effort": "Manual assessment required",
                             "Reference Links": f"https://nvd.nist.gov/vuln/detail/{cve.cve_id}",
                             "Additional Resources": "https://nvd.nist.gov/",
-                            "Immediate Actions": "• Check for available patches\n• Monitor for exploitation attempts",
-                            "Detailed Steps": "1. Consult vendor security advisories\n2. Apply recommended patches",
-                            "Verification Steps": "• Verify patch installation\n• Test system functionality",
-                            "Rollback Plan": "• Maintain system backups\n• Test rollback procedure",
+                            "Immediate Actions": "• Check for available patches\\n• Monitor for exploitation attempts",
+                            "Detailed Steps": "1. Consult vendor security advisories\\n2. Apply recommended patches",
+                            "Verification Steps": "• Verify patch installation\\n• Test system functionality",
+                            "Rollback Plan": "• Maintain system backups\\n• Test rollback procedure",
                         }
                     })
-
+            
             result = {
                 "original_row": idx + header_row + 2,  # +2 for 0-based index + header
                 "original_data": original_data,
@@ -176,7 +222,8 @@ async def process_single_vulnerability_async(
                 "type": vuln_type,
                 "cve_count": len(cve_results),
                 "cve_results": cve_results,
-                "remediation_data": remediation_data,  # New: Array of remediation data for each CVE
+                "risk_assessment_data": risk_assessment_data,  # New: Array of risk assessments for each CVE
+                "remediation_data": remediation_data,  # Array of remediation data for each CVE
                 "severity_summary": severity_counts,
                 "avg_cvss_score": total_score / score_count if score_count > 0 else 0,
                 "highest_score": max(cve.score for cve in cve_results),
@@ -191,6 +238,7 @@ async def process_single_vulnerability_async(
                 "type": vuln_type,
                 "cve_count": 0,
                 "cve_results": [],
+                "risk_assessment_data": [],  # Empty array when no CVEs found
                 "remediation_data": [],  # Empty array when no CVEs found
                 "severity_summary": {},
                 "avg_cvss_score": 0,
@@ -198,19 +246,18 @@ async def process_single_vulnerability_async(
                 "processed_at": datetime.now().isoformat(),
             }
             return result, "success_no_cves"
-
     except Exception as e:
         error_result = {
             "original_row": idx + header_row + 2,
             "original_data": original_data,
             "title": title,
             "type": vuln_type,
+            "risk_assessment_data": [],  # Empty array on error
             "remediation_data": [],  # Empty array on error
             "error": str(e),
             "processed_at": datetime.now().isoformat(),
         }
         return error_result, "error"
-
 
 
 def process_single_vulnerability(
@@ -253,7 +300,6 @@ def process_single_vulnerability(
             "processed_at": datetime.now().isoformat(),
         }
         return error_result, "error"
-
 
 def process_vulnerability_report(
     df: pd.DataFrame, max_results_per_vuln: int = 3, max_workers: int = 5
