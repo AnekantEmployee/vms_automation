@@ -1,4 +1,5 @@
 import time
+import json
 import asyncio
 import pandas as pd
 import streamlit as st
@@ -19,7 +20,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Streamlined CSS (unchanged)
+# Streamlined CSS
 st.markdown(
     """
 <style>
@@ -81,8 +82,6 @@ class ChatInterface:
     @staticmethod
     def clear_chat():
         st.session_state.chat_messages = []
-
-
 
 def read_uploaded_file(uploaded_file) -> pd.DataFrame:
     """Read uploaded file"""
@@ -258,7 +257,6 @@ async def process_single_vulnerability_async(
             "processed_at": datetime.now().isoformat(),
         }
         return error_result, "error"
-
 
 def process_single_vulnerability(
     idx: int,
@@ -591,6 +589,9 @@ def main():
             )
             st.metric("Avg CVEs/Vuln", f"{avg_cves:.1f}")
 
+        # Here add the summary
+        
+        
         # Export
         st.divider()
         st.subheader("📤 Export Enhanced Report")
