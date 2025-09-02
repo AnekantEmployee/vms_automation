@@ -40,7 +40,7 @@ def search_vuldb_by_keyword(api_key, keyword):
 
 
 if __name__ == "__main__":
-    # Replace with your actual API key
+    # Replace with your actual API keyw
     API_KEY = "13a4fe0bc34d213a5d211f25f04373ff"
     CVE_ID = "CVE-2024-4282"
 

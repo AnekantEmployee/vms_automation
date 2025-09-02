@@ -7,6 +7,7 @@ from langchain_core.tools import tool
 from ..models.data_models import CVEResult
 from ..services.nist_service import search_nist_nvd
 from ..services.cve_org_service import search_cve_org
+from ..services.osv_service import search_osv_database
 
 
 @tool
@@ -61,6 +62,14 @@ def search_cve_databases(query: str) -> List[CVEResult]:
     
     results = []
     
+    # Search OSV database
+    try:
+        osv_results = search_osv_database(query)
+        if osv_results:
+            results.extend(osv_results)
+    except Exception as e:
+        print(f"OSV search failed: {e}")
+    
     # Search NIST NVD database
     try:
         nist_results = search_nist_nvd(query)
@@ -86,7 +95,11 @@ def search_cve_databases(query: str) -> List[CVEResult]:
                 nist_results = search_nist_nvd(broader_query)
                 if nist_results:
                     results.extend(nist_results)
+                    
+                osv_results = search_osv_database(broader_query)
+                if osv_results:
+                    results.extend(osv_results)
             except Exception as e:
-                print(f"Broader NIST search failed: {e}")
+                print(f"Broader search failed: {e}")
     
     return results

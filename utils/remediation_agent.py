@@ -1,14 +1,28 @@
-import json
 import asyncio
 import time
-from dotenv import load_dotenv
+import json
+from datetime import datetime, timedelta
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-from typing import Dict, Any, List
-from tavily import AsyncTavilyClient
-from langchain.schema import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain.schema import HumanMessage, SystemMessage
+from langchain.output_parsers import PydanticOutputParser
+from pydantic import BaseModel, Field
 
-load_dotenv()
+# Pydantic models for output parsing
+class RemediationOutput(BaseModel):
+    remediation_guide: str = Field(description="Specific remediation guidance for the vulnerability")
+    business_context: str = Field(description="Business impact and importance")
+    technical_details: str = Field(description="Key technical considerations")
+    timeline_recommendation: str = Field(description="Recommended timeline for remediation")
+    immediate_actions: List[str] = Field(description="3 immediate actions to take", max_items=3)
+    detailed_steps: List[str] = Field(description="Detailed step-by-step remediation process", max_items=6)
+
+class RiskAssessmentOutput(BaseModel):
+    risk_category: str = Field(description="Risk level: Critical/High/Medium/Low")
+    risk_score: float = Field(description="Risk score 0-10", ge=0, le=10)
+    business_impact: str = Field(description="Specific business impact description")
+    remediation_urgency: str = Field(description="Timeline for remediation")
 
 @dataclass
 class RemediationResult:
@@ -22,454 +36,465 @@ class RemediationResult:
     verification_steps: List[str]
     rollback_plan: List[str]
 
-class RateLimitedRemediationAgent:
-    """Rate-limited remediation agent with intelligent batching and fallbacks"""
+class ImprovedRemediationAgent:
+    """Improved agent with better rate limiting and fallback strategies"""
     
     def __init__(self):
-        # Use gemini-1.5-flash which has higher free tier limits (15 RPM vs 15 RPM for 2.0)
+        # Use a paid model or switch to Gemini Pro if available
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",  # Better free tier limits
-            temperature=0.4,
+            model="gemini-1.5-flash",  # Try Pro version - better limits
+            temperature=0.3,
             max_tokens=1000,
-            timeout=30
+            timeout=60,
+            max_retries=1  # Minimal retries to avoid quota exhaustion
         )
-        self.tavily_client = AsyncTavilyClient()
         
-        # Rate limiting tracking
-        self.request_timestamps = []
-        self.max_requests_per_minute = 12  # Conservative limit for free tier
-        self.request_interval = 5  # Minimum seconds between requests
+        # Initialize output parsers
+        self.remediation_parser = PydanticOutputParser(pydantic_object=RemediationOutput)
+        self.risk_parser = PydanticOutputParser(pydantic_object=RiskAssessmentOutput)
+        
+        # Much more conservative rate limiting for free tier
+        self.daily_request_count = 0
+        self.daily_limit = 45  # Leave buffer below 50
+        self.last_reset_date = datetime.now().date()
+        self.min_request_interval = 30  # 30 seconds between requests
         self.last_request_time = 0
         
-        # Caching for efficiency
-        self.search_cache = {}
+        # Enhanced caching to minimize API calls
         self.remediation_cache = {}
-    
-    async def _rate_limited_llm_call(self, messages: List, max_retries: int = 3) -> str:
-        """Make rate-limited LLM calls with exponential backoff"""
+        self.template_cache = {}
         
-        for attempt in range(max_retries):
-            try:
-                # Check rate limits
-                current_time = time.time()
-                
-                # Remove timestamps older than 1 minute
-                self.request_timestamps = [
-                    ts for ts in self.request_timestamps 
-                    if current_time - ts < 60
-                ]
-                
-                # Wait if we've hit the rate limit
-                if len(self.request_timestamps) >= self.max_requests_per_minute:
-                    wait_time = 60 - (current_time - self.request_timestamps[0]) + 1
-                    print(f"Rate limit reached. Waiting {wait_time:.1f} seconds...")
-                    await asyncio.sleep(wait_time)
-                
-                # Ensure minimum interval between requests
-                time_since_last = current_time - self.last_request_time
-                if time_since_last < self.request_interval:
-                    wait_time = self.request_interval - time_since_last
-                    await asyncio.sleep(wait_time)
-                
-                # Make the request
-                response = await self.llm.ainvoke(messages)
-                
-                # Update tracking
-                self.request_timestamps.append(time.time())
-                self.last_request_time = time.time()
-                
-                return response.content
-                
-            except Exception as e:
-                if "429" in str(e) or "ResourceExhausted" in str(e):
-                    # Exponential backoff for rate limit errors
-                    wait_time = min(2 ** attempt * 10, 120)  # Max 2 minutes
-                    print(f"Rate limit hit (attempt {attempt + 1}). Waiting {wait_time} seconds...")
-                    await asyncio.sleep(wait_time)
-                    continue
-                else:
-                    print(f"LLM call error (attempt {attempt + 1}): {e}")
-                    if attempt == max_retries - 1:
-                        raise e
-                    await asyncio.sleep(2 ** attempt)  # Regular exponential backoff
+        # Circuit breaker
+        self.consecutive_failures = 0
+        self.max_failures = 2
+        self.circuit_breaker_until = None
         
-        raise Exception("Max retries exceeded for LLM call")
+    def _reset_daily_counter_if_needed(self):
+        """Reset daily counter at midnight"""
+        current_date = datetime.now().date()
+        if current_date > self.last_reset_date:
+            self.daily_request_count = 0
+            self.last_reset_date = current_date
+            self.consecutive_failures = 0
+            self.circuit_breaker_until = None
+            print(f"Daily API counter reset for {current_date}")
     
-    async def _cached_search(self, query: str) -> Dict:
-        """Cached Tavily search to avoid duplicate searches"""
-        if query in self.search_cache:
-            return self.search_cache[query]
+    def _can_make_api_call(self) -> bool:
+        """Check if we can make an API call"""
+        self._reset_daily_counter_if_needed()
+        
+        # Check daily limit
+        if self.daily_request_count >= self.daily_limit:
+            print(f"Daily API limit reached ({self.daily_request_count}/{self.daily_limit})")
+            return False
+        
+        # Check circuit breaker
+        if self.circuit_breaker_until and datetime.now() < self.circuit_breaker_until:
+            print(f"Circuit breaker active until {self.circuit_breaker_until}")
+            return False
+        
+        # Check rate limiting interval
+        time_since_last = time.time() - self.last_request_time
+        if time_since_last < self.min_request_interval:
+            print(f"Rate limit: need to wait {self.min_request_interval - time_since_last:.1f} more seconds")
+            return False
+        
+        return True
+    
+    def _record_api_success(self):
+        """Record successful API call"""
+        self.daily_request_count += 1
+        self.last_request_time = time.time()
+        self.consecutive_failures = 0
+        print(f"API call successful. Daily count: {self.daily_request_count}/{self.daily_limit}")
+    
+    def _record_api_failure(self):
+        """Record failed API call"""
+        self.consecutive_failures += 1
+        if self.consecutive_failures >= self.max_failures:
+            self.circuit_breaker_until = datetime.now() + timedelta(hours=1)
+            print(f"Circuit breaker activated for 1 hour due to {self.consecutive_failures} failures")
+    
+    def _wait_for_rate_limit(self):
+        """Wait for rate limit if needed"""
+        time_since_last = time.time() - self.last_request_time
+        if time_since_last < self.min_request_interval:
+            wait_time = self.min_request_interval - time_since_last
+            print(f"Waiting {wait_time:.1f} seconds for rate limit...")
+            time.sleep(wait_time)
+    
+    async def _safe_llm_call_sync(self, messages: List) -> str:
+        """Synchronous LLM call with proper error handling"""
+        
+        if not self._can_make_api_call():
+            raise Exception("API call not allowed due to rate limits or circuit breaker")
+        
+        self._wait_for_rate_limit()
         
         try:
-            result = await self.tavily_client.search(
-                query=query,
-                search_depth="basic",  # Use basic to be faster
-                max_results=2,  # Reduce results to speed up
-                include_raw_content=False
-            )
-            self.search_cache[query] = result
-            return result
+            # Make synchronous call to avoid event loop issues
+            response = self.llm.invoke(messages)
+            self._record_api_success()
+            return response.content
+            
         except Exception as e:
-            print(f"Search error for '{query}': {e}")
-            return {"results": []}
+            self._record_api_failure()
+            error_str = str(e).lower()
+            
+            if any(keyword in error_str for keyword in ['429', 'quota', 'rate', 'limit', 'resourceexhausted']):
+                print(f"Rate limit hit: {e}")
+                # Set circuit breaker for longer time on rate limits
+                self.circuit_breaker_until = datetime.now() + timedelta(hours=2)
+            
+            raise e
     
-    async def _search_comprehensive_remediation_info(self, cve_id: str, vulnerability_title: str, cve_description: str) -> Dict[str, Any]:
-        """Optimized search with reduced API calls"""
-        search_results = {
-            "patch_info": [],
-            "vendor_advisories": [],
-            "general_info": []
+    def _generate_category_specific_template(self, vuln_data: Dict, cve_info: Dict) -> RemediationResult:
+        """Generate category-specific template without API calls"""
+        
+        category = vuln_data.get('category', '').lower()
+        title = vuln_data.get('title', '').lower()
+        cve_id = cve_info.get('cve_id', 'Unknown')
+        severity = cve_info.get('severity', 'Medium')
+        is_pci = vuln_data.get('PCI Vuln', 'no').lower() == 'yes'
+        
+        # Determine template based on vulnerability characteristics
+        if 'plaintext' in title or 'plain-text' in title:
+            if 'authentication' in title or 'login' in title:
+                template_key = 'plaintext_auth'
+            else:
+                template_key = 'plaintext_data'
+        elif 'ssl' in title or 'tls' in title:
+            template_key = 'ssl_tls'
+        elif 'web' in category:
+            template_key = 'web_server'
+        elif 'grafana' in title:
+            template_key = 'grafana_secrets'
+        else:
+            template_key = 'generic'
+        
+        templates = {
+            'plaintext_auth': {
+                'guide': f"Critical authentication security flaw ({cve_id}): Web server transmits login credentials in plain text. Implement HTTPS encryption immediately to protect user authentication data.",
+                'actions': [
+                    "Enable HTTPS/SSL encryption for all login forms",
+                    "Configure secure authentication protocols",
+                    "Implement HTTP Strict Transport Security (HSTS)"
+                ],
+                'steps': [
+                    "Obtain and install valid SSL/TLS certificate",
+                    "Configure web server to redirect HTTP to HTTPS",
+                    "Update all login forms to use HTTPS endpoints",
+                    "Test authentication flow over encrypted connection",
+                    "Disable HTTP access to sensitive areas"
+                ]
+            },
+            'plaintext_data': {
+                'guide': f"Data transmission security vulnerability ({cve_id}): Sensitive data transmitted without encryption. Enable secure protocols to protect data integrity and confidentiality.",
+                'actions': [
+                    "Enable data encryption in transit (HTTPS/TLS)",
+                    "Configure secure data transmission protocols", 
+                    "Implement end-to-end encryption for sensitive data"
+                ],
+                'steps': [
+                    "Identify all data transmission points",
+                    "Configure TLS encryption for data channels",
+                    "Update application code to use secure protocols",
+                    "Verify encryption is working correctly",
+                    "Monitor for unencrypted data transmission"
+                ]
+            },
+            'ssl_tls': {
+                'guide': f"SSL/TLS configuration vulnerability ({cve_id}): Weak or misconfigured encryption. Update SSL/TLS settings to current security standards.",
+                'actions': [
+                    "Update SSL/TLS certificates to latest version",
+                    "Configure strong cipher suites and protocols",
+                    "Disable weak encryption methods"
+                ],
+                'steps': [
+                    "Audit current SSL/TLS configuration",
+                    "Generate new certificates with strong encryption",
+                    "Update cipher suite configuration",
+                    "Test SSL configuration with security tools",
+                    "Monitor certificate expiration dates"
+                ]
+            },
+            'grafana_secrets': {
+                'guide': f"Grafana Agent secret exposure ({cve_id}): Configuration endpoints expose sensitive credentials in plaintext. Upgrade to patched version and implement access controls.",
+                'actions': [
+                    "Upgrade Grafana Agent to version 0.20.1 or 0.21.2+",
+                    "Implement HTTPS with client authentication",
+                    "Use file-based secrets instead of inline secrets"
+                ],
+                'steps': [
+                    "Backup current Grafana Agent configuration",
+                    "Download Grafana Agent v0.20.1+ or v0.21.2+",
+                    "Migrate inline secrets to external secret files",
+                    "Configure HTTPS with client authentication",
+                    "Restrict network access to configuration endpoints",
+                    "Verify secrets are no longer exposed via API endpoints"
+                ]
+            },
+            'web_server': {
+                'guide': f"Web server security vulnerability ({cve_id}): Server configuration exposes security risks. Apply security hardening and patches.",
+                'actions': [
+                    "Apply web server security patches",
+                    "Harden web server configuration",
+                    "Enable security headers and protections"
+                ],
+                'steps': [
+                    "Review web server version and available updates",
+                    "Apply latest security patches",
+                    "Configure security headers (HSTS, CSP, etc.)",
+                    "Disable unnecessary services and modules",
+                    "Implement access logging and monitoring"
+                ]
+            },
+            'generic': {
+                'guide': f"Security vulnerability identified ({cve_id}): Apply vendor patches and security controls to address identified risk.",
+                'actions': [
+                    "Apply vendor security patches immediately",
+                    "Review and harden system configuration",
+                    "Enable security monitoring and alerting"
+                ],
+                'steps': [
+                    "Check vendor advisories for security patches",
+                    "Test patches in staging environment",
+                    "Apply patches during maintenance window",
+                    "Verify patch installation success",
+                    "Monitor system for proper functionality"
+                ]
+            }
         }
         
-        if not cve_id or cve_id == "N/A":
-            return search_results
+        template = templates.get(template_key, templates['generic'])
         
-        try:
-            # Reduced to 2 focused searches instead of 4
-            search_queries = [
-                f"{cve_id} patch fix remediation",
-                f"{cve_id} security advisory mitigation"
+        # Adjust priority for PCI compliance
+        if is_pci:
+            priority = "Critical"
+            urgency_boost = " (PCI Compliance Critical)"
+        else:
+            priority = severity if severity in ["Critical", "High", "Medium", "Low"] else "Medium"
+            urgency_boost = ""
+        
+        # Build references
+        references = []
+        if cve_id != "Unknown":
+            references.append(f"https://nvd.nist.gov/vuln/detail/{cve_id}")
+        
+        return RemediationResult(
+            remediation_guide=template['guide'] + urgency_boost,
+            priority=priority,
+            estimated_effort="2-6 hours depending on system complexity and testing requirements",
+            references=references,
+            additional_resources=[
+                "https://nvd.nist.gov/",
+                "https://cve.mitre.org/",
+                "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+            ],
+            immediate_actions=template['actions'],
+            detailed_steps=template['steps'],
+            verification_steps=[
+                "Verify remediation has been applied successfully",
+                "Run vulnerability scanner to confirm fix",
+                "Test critical system functionality",
+                "Document remediation for compliance audit"
+            ],
+            rollback_plan=[
+                "Maintain complete system backups before changes",
+                "Document all configuration modifications",
+                "Test rollback procedures in staging environment",
+                "Keep previous configurations for quick restoration"
             ]
-            
-            # Execute searches with delay to avoid overwhelming Tavily
-            for i, query in enumerate(search_queries):
-                if i > 0:
-                    await asyncio.sleep(1)  # Small delay between searches
-                
-                result = await self._cached_search(query)
-                
-                category = "patch_info" if i == 0 else "vendor_advisories"
-                
-                for item in result.get('results', []):
-                    processed_result = {
-                        'title': item.get('title', ''),
-                        'content': item.get('content', ''),
-                        'url': item.get('url', ''),
-                        'score': item.get('score', 0)
-                    }
-                    search_results[category].append(processed_result)
-            
-            return search_results
-            
-        except Exception as e:
-            print(f"Comprehensive search error: {e}")
-            return search_results
+        )
     
     async def generate_remediation(self, vulnerability_data: Dict, cve_info: Dict) -> RemediationResult:
-        """Generate remediation with intelligent rate limiting and caching"""
+        """Generate remediation with smart fallback strategy"""
         
         # Create cache key
-        cache_key = f"{cve_info.get('cve_id', 'unknown')}_{vulnerability_data.get('title', 'unknown')}"
+        cache_key = f"{cve_info.get('cve_id', 'unknown')}_{vulnerability_data.get('QID', 'unknown')}"
         
         if cache_key in self.remediation_cache:
             print(f"Using cached remediation for {cve_info.get('cve_id', 'unknown')}")
             return self.remediation_cache[cache_key]
         
-        try:
-            cve_id = cve_info.get('cve_id', 'Unknown')
-            cve_description = cve_info.get('description', '')
-            vulnerability_title = vulnerability_data.get('title', 'Unknown')
-            
-            # Reduced external research to minimize API calls
-            if cve_id != "Unknown" and cve_id != "N/A":
-                research_data = await self._search_comprehensive_remediation_info(
-                    cve_id, vulnerability_title, cve_description
-                )
-            else:
-                research_data = {"patch_info": [], "vendor_advisories": [], "general_info": []}
-            
-            # Build optimized context
-            context_prompt = self._build_optimized_context(
-                vulnerability_data, cve_info, research_data
-            )
-            
-            # Generate remediation with rate limiting
-            remediation_response = await self._generate_smart_remediation(context_prompt)
-            
-            # Parse and cache result
-            result = self._parse_remediation_response(remediation_response, research_data)
-            self.remediation_cache[cache_key] = result
-            
-            return result
-            
-        except Exception as e:
-            print(f"Remediation generation error: {e}")
-            return self._create_fallback_remediation(vulnerability_data, cve_info)
-
-    def _build_optimized_context(self, vuln_data: Dict, cve_info: Dict, research_data: Dict) -> str:
-        """Build context optimized for shorter prompts to reduce token usage"""
+        # First, try to use our smart template system
+        template_result = self._generate_category_specific_template(vulnerability_data, cve_info)
         
-        # Compact research context
-        research_summary = ""
+        # Only use LLM if we're confident we can make the call and it's worth it
+        if self._can_make_api_call() and self._should_use_llm(vulnerability_data, cve_info):
+            try:
+                print("Attempting LLM enhancement...")
+                enhanced_result = await self._enhance_with_llm(template_result, vulnerability_data, cve_info)
+                self.remediation_cache[cache_key] = enhanced_result
+                return enhanced_result
+                
+            except Exception as e:
+                print(f"LLM enhancement failed, using template: {e}")
+                self.remediation_cache[cache_key] = template_result
+                return template_result
+        else:
+            print("Using template-based remediation (preserving API quota)")
+            self.remediation_cache[cache_key] = template_result
+            return template_result
+    
+    def _should_use_llm(self, vuln_data: Dict, cve_info: Dict) -> bool:
+        """Determine if LLM enhancement is worth the API cost"""
         
-        if research_data.get('patch_info'):
-            patches = research_data['patch_info'][:1]  # Only use top result
-            if patches:
-                research_summary += f"Patch Info: {patches[0]['title']} - {patches[0]['content'][:150]}\n"
+        # Only use LLM for high-value cases
+        severity = cve_info.get('severity', 'Medium')
+        is_pci = vuln_data.get('PCI Vuln', 'no').lower() == 'yes'
+        cve_score = float(cve_info.get('score', 0))
         
-        if research_data.get('vendor_advisories'):
-            advisories = research_data['vendor_advisories'][:1]  # Only use top result
-            if advisories:
-                research_summary += f"Advisory: {advisories[0]['title']} - {advisories[0]['content'][:150]}\n"
+        # Use LLM for critical cases only
+        if severity == 'Critical' or is_pci or cve_score >= 8.0:
+            return True
         
-        return f"""CVE: {cve_info.get('cve_id', 'Unknown')}
-    Title: {vuln_data.get('title', 'Unknown')}
-    CVSS: {cve_info.get('score', 'N/A')} | Severity: {cve_info.get('severity', 'Unknown')}
-    OS: {vuln_data.get('os', 'Unknown')} | Category: {vuln_data.get('category', 'Unknown')}
-
-    Description: {cve_info.get('description', 'No description')[:200]}
-
-    Research: {research_summary[:300] if research_summary else 'Limited research available'}
-
-    Generate JSON response:
-    {{
-        "remediation_guide": "Brief but specific remediation overview",
-        "priority": "Critical/High/Medium/Low",
-        "estimated_effort": "Time estimate with reasoning",
-        "immediate_actions": ["Action 1", "Action 2", "Action 3"],
-        "detailed_steps": ["Step 1", "Step 2", "Step 3"],
-        "verification_steps": ["Verify 1", "Verify 2", "Verify 3"],
-        "rollback_plan": ["Rollback 1", "Rollback 2", "Rollback 3"]
-    }}"""
+        # Check if we have enough daily quota for non-critical cases
+        remaining_quota = self.daily_limit - self.daily_request_count
+        if remaining_quota > 10:  # Only if we have plenty of quota left
+            return True
         
-
-    async def _generate_smart_remediation(self, context_prompt: str) -> str:
-        """Generate remediation with smart fallbacks"""
+        return False
+    
+    async def _enhance_with_llm(self, template_result: RemediationResult, 
+                               vuln_data: Dict, cve_info: Dict) -> RemediationResult:
+        """Enhance template with LLM-generated insights using output parser"""
         
-        system_message = """You are a cybersecurity expert. Generate specific, actionable remediation guidance based on the provided data. Be concise but comprehensive. Focus on practical steps."""
+        # Create structured prompt with parser instructions
+        context = f"""
+        Vulnerability Details:
+        - Title: {vuln_data.get('Title', 'Unknown')}
+        - CVE ID: {cve_info.get('cve_id', 'Unknown')}
+        - Severity: {cve_info.get('severity', 'Unknown')} (Score: {cve_info.get('score', 'N/A')})
+        - PCI Impact: {vuln_data.get('PCI Vuln', 'no')}
+        - Asset: {vuln_data.get('DNS', vuln_data.get('IP', 'Unknown'))}
+        - Current Assessment: {template_result.remediation_guide}
+        
+        Enhance this security remediation with specific, actionable guidance.
+        """
+        
+        # Get format instructions from parser
+        format_instructions = self.remediation_parser.get_format_instructions()
+        
+        prompt = f"""
+        {context}
+        
+        Provide enhanced remediation guidance for this vulnerability.
+        Focus on actionable, specific technical steps and business context.
+        
+        {format_instructions}
+        """
         
         try:
-            # Try LLM generation with rate limiting
-            response = await self._rate_limited_llm_call([
-                SystemMessage(content=system_message),
-                HumanMessage(content=context_prompt)
+            response = await self._safe_llm_call_sync([
+                SystemMessage(content="You are a cybersecurity expert. Provide specific, actionable remediation guidance."),
+                HumanMessage(content=prompt)
             ])
-            return response
+            
+            # Parse response using output parser
+            parsed_output = self.remediation_parser.parse(response)
+            
+            # Enhance the template with parsed output
+            template_result.remediation_guide = parsed_output.remediation_guide
+            template_result.immediate_actions = parsed_output.immediate_actions
+            template_result.detailed_steps = parsed_output.detailed_steps
+            
+            return template_result
             
         except Exception as e:
-            print(f"LLM generation failed: {e}")
-            # Fallback to template-based generation
-            return self._generate_template_based_remediation(context_prompt)
+            print(f"LLM enhancement with parser failed: {e}")
+            return template_result
     
-    def _generate_template_based_remediation(self, context: str) -> str:
-        """Fallback template-based remediation when LLM fails"""
+    async def _safe_llm_call_sync(self, messages: List) -> str:
+        """Safe synchronous LLM call"""
         
-        # Extract key info from context
-        lines = context.split('\n')
-        cve_id = "Unknown"
-        severity = "Medium"
+        if not self._can_make_api_call():
+            raise Exception("API quota or rate limit prevents call")
         
-        for line in lines:
-            if "CVE:" in line:
-                cve_id = line.split("CVE:")[-1].strip()
-            elif "Severity:" in line:
-                severity = line.split("Severity:")[-1].strip().split()[0]
-        
-        return f"""{{
-    "remediation_guide": "Apply security updates for {cve_id}. Review vendor advisories and apply recommended patches.",
-    "priority": "{severity}",
-    "estimated_effort": "2-4 hours depending on system complexity",
-    "immediate_actions": [
-        "Check for available security patches",
-        "Review vendor security advisories", 
-        "Assess system exposure and impact"
-    ],
-    "detailed_steps": [
-        "Identify all systems affected by {cve_id}",
-        "Download and test patches in staging environment",
-        "Schedule maintenance window for patch deployment",
-        "Apply patches following vendor recommendations"
-    ],
-    "verification_steps": [
-        "Verify patch installation completed successfully",
-        "Run vulnerability scanner to confirm remediation",
-        "Test system functionality post-patch application"
-    ],
-    "rollback_plan": [
-        "Maintain complete system backups before patching",
-        "Document all configuration changes made",
-        "Test rollback procedures in staging environment"
-    ]
-}}"""
-    
-    def _parse_remediation_response(self, response: str, research_data: Dict) -> RemediationResult:
-        """Parse response with improved error handling"""
         try:
-            # Try to extract JSON
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
+            response = self.llm.invoke(messages)
+            self._record_api_success()
+            return response.content
             
-            if json_start != -1 and json_end > json_start:
-                json_content = response[json_start:json_end]
-                parsed = json.loads(json_content)
-                
-                # Extract URLs from research
-                all_urls = []
-                for category in research_data.values():
-                    for item in category:
-                        if item.get('url'):
-                            all_urls.append(item['url'])
-                
-                return RemediationResult(
-                    remediation_guide=parsed.get('remediation_guide', 'Remediation required'),
-                    priority=parsed.get('priority', 'Medium'),
-                    estimated_effort=parsed.get('estimated_effort', 'Assessment required'),
-                    references=all_urls[:3],
-                    additional_resources=self._get_standard_resources(),
-                    immediate_actions=parsed.get('immediate_actions', [])[:3],
-                    detailed_steps=parsed.get('detailed_steps', [])[:5],
-                    verification_steps=parsed.get('verification_steps', [])[:3],
-                    rollback_plan=parsed.get('rollback_plan', [])[:3]
-                )
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"JSON parsing error: {e}")
-        
-        # Fallback parsing
-        return self._parse_unstructured_response(response, research_data)
-    
-    def _parse_unstructured_response(self, response: str, research_data: Dict) -> RemediationResult:
-        """Parse unstructured response"""
-        all_urls = []
-        for category in research_data.values():
-            for item in category:
-                if item.get('url'):
-                    all_urls.append(item['url'])
-        
-        return RemediationResult(
-            remediation_guide=response[:300] + "..." if len(response) > 300 else response,
-            priority=self._extract_priority_from_text(response),
-            estimated_effort="2-4 hours based on complexity",
-            references=all_urls[:3],
-            additional_resources=self._get_standard_resources(),
-            immediate_actions=self._extract_actions_from_text(response)[:3],
-            detailed_steps=["Apply available patches", "Review security configurations", "Monitor systems"],
-            verification_steps=["Verify patch installation", "Run security scan", "Test functionality"],
-            rollback_plan=["Create backups", "Document changes", "Test rollback"]
-        )
-    
-    def _extract_priority_from_text(self, text: str) -> str:
-        text_lower = text.lower()
-        if 'critical' in text_lower:
-            return 'Critical'
-        elif 'high' in text_lower:
-            return 'High'
-        elif 'low' in text_lower:
-            return 'Low'
-        return 'Medium'
-    
-    def _extract_actions_from_text(self, text: str) -> List[str]:
-        lines = text.split('\n')
-        actions = []
-        
-        for line in lines:
-            line = line.strip()
-            if (line.startswith(('1.', '2.', '3.', '-', '•')) or 
-                any(keyword in line.lower() for keyword in ['update', 'patch', 'install', 'configure'])):
-                actions.append(line[:80])
-                
-        return actions[:3] if actions else ["Review advisories", "Apply patches", "Monitor systems"]
-    
-    def _get_standard_resources(self) -> List[str]:
-        return [
-            "https://nvd.nist.gov/",
-            "https://cve.mitre.org/",
-            "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
-        ]
-    
-    def _create_fallback_remediation(self, vuln_data: Dict, cve_info: Dict) -> RemediationResult:
-        cve_id = cve_info.get('cve_id', 'Unknown')
-        
-        return RemediationResult(
-            remediation_guide=f"Security remediation required for {cve_id}. Apply vendor-recommended patches and security updates.",
-            priority="Medium",
-            estimated_effort="2-4 hours depending on system complexity",
-            references=[f"https://nvd.nist.gov/vuln/detail/{cve_id}"] if cve_id != "Unknown" else [],
-            additional_resources=self._get_standard_resources(),
-            immediate_actions=[
-                "Check vendor security advisories",
-                "Assess system exposure and impact",
-                "Plan remediation maintenance window"
-            ],
-            detailed_steps=[
-                "Identify all affected systems and versions",
-                "Download and verify security patches",
-                "Test patches in staging environment",
-                "Apply patches during maintenance window"
-            ],
-            verification_steps=[
-                "Verify successful patch installation",
-                "Run vulnerability scan to confirm fix",
-                "Test system functionality post-patch"
-            ],
-            rollback_plan=[
-                "Maintain complete system backups",
-                "Document all changes made",
-                "Test rollback procedure thoroughly"
-            ]
-        )
+        except Exception as e:
+            self._record_api_failure()
+            
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ['429', 'quota', 'rate', 'limit']):
+                # For rate limits, set longer circuit breaker
+                self.circuit_breaker_until = datetime.now() + timedelta(hours=3)
+                print("Rate limit detected - circuit breaker set for 3 hours")
+            
+            raise e
 
-# Initialize rate-limited agent
-rate_limited_remediation_agent = RateLimitedRemediationAgent()
-
+# Usage with error handling
 async def get_enhanced_remediation_data(result: Dict[str, Any], cve: Any = None) -> Dict[str, str]:
-    """Get remediation data with rate limiting and intelligent fallbacks"""
+    """Get remediation data with improved error handling"""
+    
+    agent = ImprovedRemediationAgent()
+    
     try:
         # Prepare data
         original_data = result.get("original_data", {})
-        
         vulnerability_data = {
-            "title": original_data.get("Title", "Unknown"),
-            "qid": original_data.get("QID", "N/A"),
-            "severity": original_data.get("Severity", "Unknown"),
-            "os": original_data.get("OS", "Unknown"),
+            "Title": original_data.get("Title", "Unknown"),
+            "QID": original_data.get("QID", "N/A"),
+            "Severity": original_data.get("Severity", "Unknown"),
             "category": original_data.get("Category", "Unknown"),
-            "port": original_data.get("Port", "N/A"),
-            "protocol": original_data.get("Protocol", "N/A"),
+            "PCI Vuln": original_data.get("PCI Vuln", "no"),
+            "IP": original_data.get("IP", "Unknown"),
+            "DNS": original_data.get("DNS", "Unknown")
         }
         
-        cve_info = {}
-        if cve:
+        if cve and hasattr(cve, 'cve_id'):
             cve_info = {
                 "cve_id": getattr(cve, "cve_id", "Unknown"),
                 "score": getattr(cve, "score", 0),
                 "severity": getattr(cve, "severity", "Unknown"),
-                "description": getattr(cve, "description", "No description available")
+                "description": getattr(cve, "description", "")
             }
         else:
             cve_info = {
                 "cve_id": "N/A",
                 "score": 0,
-                "severity": "Unknown", 
+                "severity": vulnerability_data.get("Severity", "Unknown"),
                 "description": "No CVE information available"
             }
         
-        # Generate with rate limiting
-        remediation_result = await rate_limited_remediation_agent.generate_remediation(
-            vulnerability_data, cve_info
-        )
+        # Generate remediation
+        remediation_result = await agent.generate_remediation(vulnerability_data, cve_info)
         
+        # Format response
         return {
             "Remediation Guide": remediation_result.remediation_guide,
             "Remediation Priority": remediation_result.priority,
             "Estimated Effort": remediation_result.estimated_effort,
-            "Reference Links": "; ".join(remediation_result.references),
+            "Reference Links": "; ".join(remediation_result.references) if remediation_result.references else "Check vendor advisories",
             "Additional Resources": "; ".join(remediation_result.additional_resources),
             "Immediate Actions": "\n".join([f"• {action}" for action in remediation_result.immediate_actions]),
             "Detailed Steps": "\n".join([f"{i+1}. {step}" for i, step in enumerate(remediation_result.detailed_steps)]),
             "Verification Steps": "\n".join([f"• {step}" for step in remediation_result.verification_steps]),
-            "Rollback Plan": "\n".join([f"• {step}" for step in remediation_result.rollback_plan]),
+            "Rollback Plan": "\n".join([f"• {step}" for step in remediation_result.rollback_plan])
         }
         
     except Exception as e:
-        print(f"Enhanced remediation error: {e}")
+        print(f"Remediation generation failed: {e}")
+        
+        # Ultimate fallback
+        cve_id = getattr(cve, 'cve_id', 'Unknown') if cve else 'Unknown'
+        title = original_data.get("Title", "Unknown vulnerability")
+        is_pci = original_data.get("PCI Vuln", "no").lower() == 'yes'
+        
+        priority = "Critical" if is_pci else "High"
+        
         return {
-            "Remediation Guide": f"Manual remediation assessment required for CVE {getattr(cve, 'cve_id', 'Unknown') if cve else 'Unknown'}.",
-            "Remediation Priority": "Medium", 
-            "Estimated Effort": "Manual assessment required",
-            "Reference Links": "",
-            "Additional Resources": "https://nvd.nist.gov/",
-            "Immediate Actions": "• Review CVE details\n• Check vendor advisories\n• Assess system exposure",
-            "Detailed Steps": "1. Analyze vulnerability impact\n2. Check for patches\n3. Plan remediation",
-            "Verification Steps": "• Verify fixes applied\n• Test functionality\n• Run vulnerability scan",
-            "Rollback Plan": "• Maintain backups\n• Document changes\n• Test rollback"
+            "Remediation Guide": f"Security remediation required for {title} ({cve_id}). Apply vendor patches and implement security controls.",
+            "Remediation Priority": priority,
+            "Estimated Effort": "2-4 hours for assessment and remediation",
+            "Reference Links": f"https://nvd.nist.gov/vuln/detail/{cve_id}" if cve_id != "Unknown" else "Check vendor advisories",
+            "Additional Resources": "https://nvd.nist.gov/; https://cve.mitre.org/",
+            "Immediate Actions": "• Review vulnerability impact\n• Apply security patches\n• Test remediation",
+            "Detailed Steps": "1. Assess vulnerability scope\n2. Apply recommended patches\n3. Verify remediation success\n4. Monitor for reoccurrence",
+            "Verification Steps": "• Confirm patches applied\n• Run security scan\n• Test functionality",
+            "Rollback Plan": "• Maintain system backups\n• Document changes\n• Test rollback procedures"
         }

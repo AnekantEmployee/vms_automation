@@ -19,7 +19,7 @@ def create_cve_agent():
     # Add nodes
     workflow.add_node("analyze_query", query_analyzer_node)
     workflow.add_node("search_cves", cve_search_node)
-    # workflow.add_node("external_search", external_search_node)
+    workflow.add_node("external_search", external_search_node)
     workflow.add_node("score_results", result_scorer_node)
     
     # Add edges

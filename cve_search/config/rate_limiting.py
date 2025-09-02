@@ -41,6 +41,7 @@ gemini_rate_limiter = RateLimiter(max_requests=15, time_window=60)  # 15 request
 nist_rate_limiter = RateLimiter(max_requests=10, time_window=60)     # 10 requests per minute  
 cve_org_rate_limiter = RateLimiter(max_requests=5, time_window=60)   # 5 requests per minute
 tavily_rate_limiter = RateLimiter(max_requests=20, time_window=60)   # 20 requests per minute
+osv_rate_limiter = RateLimiter(max_requests=30, time_window=60)  # OSV allows more requests
 
 
 def get_rate_limiter_status():
@@ -70,6 +71,12 @@ def get_rate_limiter_status():
                                      if (now - req).total_seconds() < tavily_rate_limiter.time_window]),
             "max_requests": tavily_rate_limiter.max_requests,
             "time_window": tavily_rate_limiter.time_window
+        },
+        "osv": {
+            "requests_in_window": len([req for req in osv_rate_limiter.requests 
+                                     if (now - req).total_seconds() < osv_rate_limiter.time_window]),
+            "max_requests": osv_rate_limiter.max_requests,
+            "time_window": osv_rate_limiter.time_window
         }
     }
     return status
@@ -77,11 +84,12 @@ def get_rate_limiter_status():
 
 def reset_rate_limiters():
     """Reset all rate limiters (useful for testing)."""
-    global gemini_rate_limiter, nist_rate_limiter, cve_org_rate_limiter, tavily_rate_limiter
+    global gemini_rate_limiter, nist_rate_limiter, cve_org_rate_limiter, tavily_rate_limiter, osv_rate_limiter
     
     gemini_rate_limiter = RateLimiter(max_requests=15, time_window=60)
     nist_rate_limiter = RateLimiter(max_requests=10, time_window=60)
     cve_org_rate_limiter = RateLimiter(max_requests=5, time_window=60)
     tavily_rate_limiter = RateLimiter(max_requests=20, time_window=60)
+    osv_rate_limiter = RateLimiter(max_requests=30, time_window=60)
     
     print("All rate limiters have been reset.")

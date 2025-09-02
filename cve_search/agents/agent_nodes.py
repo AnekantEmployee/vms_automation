@@ -1,7 +1,9 @@
 """Agent node implementations for CVE search workflow."""
 
-from langchain_core.messages import AIMessage
+import json
+import os
 
+from langchain_core.messages import AIMessage
 from ..models.data_models import CVESearchState
 from ..services.gemini_service import analyze_query_with_gemini
 from ..services.external_search import search_external_cve_info

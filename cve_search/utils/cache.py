@@ -5,6 +5,7 @@ from threading import Lock
 # Cache storage and locks
 _nist_cache = {}
 _cve_org_cache = {}
+_osv_cache = {}  # Add OSV cache
 _cache_lock = Lock()
 
 
@@ -25,11 +26,12 @@ def get_cache_lock():
 
 def clear_caches():
     """Clear all caches."""
-    global _nist_cache, _cve_org_cache
+    global _nist_cache, _cve_org_cache, _osv_cache
     
     with _cache_lock:
         _nist_cache.clear()
         _cve_org_cache.clear()
+        _osv_cache.clear()  # Clear OSV cache too
     
     print("All caches have been cleared.")
 
@@ -56,3 +58,14 @@ def get_cached_cve_org_results(query: str):
     """Get cached CVE.org results for a query."""
     with _cache_lock:
         return _cve_org_cache.get(query)
+
+# Add OSV cache functions
+def cache_osv_results(query: str, results):
+    """Cache OSV results for a query."""
+    with _cache_lock:
+        _osv_cache[query] = results
+
+def get_cached_osv_results(query: str):
+    """Get cached OSV results for a query."""
+    with _cache_lock:
+        return _osv_cache.get(query)

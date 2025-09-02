@@ -12,6 +12,7 @@ TIMEOUT_CONFIG = {
     'nist_api': 45,
     'cve_org_api': 45,
     'tavily_api': 30,
+    'osv_api': 30,  # Add OSV timeout
     'default': 30
 }
 
