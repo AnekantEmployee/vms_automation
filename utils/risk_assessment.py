@@ -10,13 +10,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 load_dotenv()
 
-class SimpleRiskAssessment(BaseModel):
-    risk_category: str = Field(description="Risk level: Critical/High/Medium/Low")
-    risk_score: float = Field(description="Risk score 0-10")
-    business_impact: str = Field(description="Business impact summary")
-    remediation_priority: str = Field(description="Remediation urgency")
-    key_actions: List[str] = Field(description="Top 3 remediation actions")
-
 @dataclass
 class RiskResult:
     risk_category: str
@@ -25,6 +18,7 @@ class RiskResult:
     business_impact: str
     remediation_urgency: str
     immediate_actions: List[str]
+    exploitation_methods: str  # NEW: Add this field
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -33,8 +27,17 @@ class RiskResult:
             'risk_details': self.risk_details,
             'business_impact': self.business_impact,
             'remediation_urgency': self.remediation_urgency,
-            'immediate_actions': self.immediate_actions
+            'immediate_actions': self.immediate_actions,
+            'exploitation_methods': self.exploitation_methods  # NEW: Add this field
         }
+
+class SimpleRiskAssessment(BaseModel):
+    risk_category: str = Field(description="Risk level: Critical/High/Medium/Low")
+    risk_score: float = Field(description="Risk score 0-10")
+    business_impact: str = Field(description="Business impact summary")
+    remediation_priority: str = Field(description="Remediation urgency")
+    key_actions: List[str] = Field(description="Top 3 remediation actions")
+    exploitation_methods: str = Field(description="How vulnerability can be exploited")  # NEW
 
 class RiskAgentState(TypedDict):
     vulnerability_data: Dict[str, Any]
@@ -136,16 +139,20 @@ class FastVulnerabilityRiskAgent:
             vuln_data = state["vulnerability_data"]
             calculated_risk = state.get("calculated_risk", {})
             cve_data = state.get("cve_data", {})
+            
             risk_details = await self._generate_risk_details(vuln_data, calculated_risk, cve_data)
             immediate_actions = self._generate_user_friendly_actions(vuln_data, calculated_risk)
             business_impact = self._generate_business_impact(vuln_data, calculated_risk, cve_data)
+            exploitation_methods = await self._generate_exploitation_methods(vuln_data, cve_data)  # NEW
+            
             state["risk_assessment"] = RiskResult(
                 risk_category=calculated_risk.get('risk_category', 'Medium'),
                 risk_score=calculated_risk.get('risk_score', 5.0),
                 risk_details=risk_details,
                 business_impact=business_impact,
                 remediation_urgency=self._get_urgency(calculated_risk.get('risk_category', 'Medium')),
-                immediate_actions=immediate_actions
+                immediate_actions=immediate_actions,
+                exploitation_methods=exploitation_methods  # NEW
             )
             return state
         except Exception as e:
@@ -153,16 +160,183 @@ class FastVulnerabilityRiskAgent:
             calculated_risk = state.get("calculated_risk", {})
             vuln_data = state["vulnerability_data"]
             cve_data = state.get("cve_data", {})
+            
             risk_details = await self._generate_risk_details(vuln_data, calculated_risk, cve_data)
+            exploitation_methods = await self._generate_exploitation_methods(vuln_data, cve_data)  # NEW
+            
             state["risk_assessment"] = RiskResult(
                 risk_category=calculated_risk.get('risk_category', 'Medium'),
                 risk_score=calculated_risk.get('risk_score', 5.0),
                 risk_details=risk_details,
                 business_impact="Potential security exposure requiring immediate attention",
                 remediation_urgency=self._get_urgency(calculated_risk.get('risk_category', 'Medium')),
-                immediate_actions=self._generate_user_friendly_actions(vuln_data, calculated_risk)
+                immediate_actions=self._generate_user_friendly_actions(vuln_data, calculated_risk),
+                exploitation_methods=exploitation_methods  # NEW
             )
             return state
+
+    async def _generate_exploitation_methods(self, vuln_data: Dict, cve_data: Dict = None) -> str:
+        """Generate detailed exploitation methods using LLM and external research"""
+        try:
+            vulnerability_title = vuln_data.get('Title', 'Unknown vulnerability')
+            asset_info = vuln_data.get('DNS', vuln_data.get('IP', 'Unknown asset'))
+            port = vuln_data.get('Port', 'Unknown')
+            protocol = vuln_data.get('Protocol', 'Unknown')
+            
+            cve_context = ""
+            if cve_data:
+                cve_id = cve_data.get('cve_id', '')
+                cvss_score = cve_data.get('score', 0)
+                cve_description = cve_data.get('description', '')
+                vector_string = cve_data.get('vector_string', '')
+                cwe_info = cve_data.get('cwe_info', [])
+                
+                # Get external exploitation research
+                try:
+                    external_research = await self._search_exploitation_context(cve_id, vulnerability_title)
+                except Exception as e:
+                    print(f"External exploitation research error: {e}")
+                    external_research = ""
+                
+                cve_context = f"""
+                CVE Details:
+                - CVE ID: {cve_id}
+                - CVSS Score: {cvss_score}/10
+                - Description: {cve_description[:400]}
+                - Attack Vector: {vector_string}
+                - CWE Categories: {', '.join(cwe_info[:3])}
+                
+                External Exploitation Research:
+                {external_research[:600] if external_research else 'Limited exploitation context available'}
+                """
+            
+            # Create comprehensive prompt for exploitation analysis
+            prompt = f"""
+            You are a penetration testing expert. Analyze how this vulnerability can be exploited by attackers.
+            
+            Vulnerability Information:
+            - Title: {vulnerability_title}
+            - Asset: {asset_info}
+            - Port: {port}
+            - Protocol: {protocol}
+            
+            {cve_context}
+            
+            Generate a detailed exploitation analysis that includes:
+            1. **Primary Attack Vector**: How an attacker would initially exploit this vulnerability
+            2. **Prerequisites**: What an attacker needs (network access, credentials, tools)
+            3. **Exploitation Steps**: Step-by-step attack methodology
+            4. **Potential Impact**: What an attacker can achieve (data access, system control, privilege escalation)
+            5. **Attack Complexity**: How difficult this is to exploit (Low/Medium/High)
+            6. **Common Tools**: Tools/frameworks attackers typically use
+            
+            Focus on:
+            - Realistic, technical exploitation scenarios
+            - Network-based attack paths
+            - Post-exploitation possibilities
+            - Both automated and manual attack methods
+            - Real-world attacker TTPs (Tactics, Techniques, and Procedures)
+            
+            Format as clear, technical paragraphs. Avoid generic descriptions.
+            Keep under 300 words but be specific and actionable for defenders.
+            """
+            
+            # Generate exploitation analysis using LLM
+            response = self.llm.invoke(prompt)
+            exploitation_methods = response.content.strip()
+            
+            # Clean up any unwanted formatting
+            exploitation_methods = exploitation_methods.replace('"', '').replace('*', '').strip()
+            
+            return exploitation_methods
+            
+        except Exception as e:
+            print(f"LLM exploitation analysis generation error: {e}")
+            
+            # Enhanced fallback based on available data
+            if cve_data:
+                cve_id = cve_data.get('cve_id', 'this vulnerability')
+                cvss_score = cve_data.get('score', 0)
+                vector_string = cve_data.get('vector_string', '')
+                
+                # Analyze attack vector from CVSS
+                if 'AV:N' in vector_string:
+                    attack_vector = "Remote network-based exploitation"
+                elif 'AV:A' in vector_string:
+                    attack_vector = "Adjacent network access required"
+                elif 'AV:L' in vector_string:
+                    attack_vector = "Local access required"
+                else:
+                    attack_vector = "Network-based attack vector"
+                
+                if cvss_score >= 7.0:
+                    complexity = "Low complexity - easily exploitable"
+                elif cvss_score >= 4.0:
+                    complexity = "Medium complexity - requires some skill"
+                else:
+                    complexity = "High complexity - advanced techniques required"
+            else:
+                attack_vector = "Network-based exploitation likely"
+                complexity = "Medium complexity attack"
+            
+            port_info = f" targeting port {vuln_data.get('Port', 'unknown')}" if vuln_data.get('Port') else ""
+            
+            return f"{attack_vector}{port_info}. {complexity}. Attackers may use automated scanning tools to identify and exploit this vulnerability, potentially leading to unauthorized access or system compromise."
+
+    async def _search_exploitation_context(self, cve_id: str, vulnerability_title: str) -> str:
+        """Search for exploitation techniques and proof-of-concept information"""
+        if not cve_id and not vulnerability_title:
+            return ""
+        
+        try:
+            # Create targeted search query for exploitation methods
+            if cve_id:
+                search_query = f"{cve_id} exploit proof of concept attack vector penetration testing"
+            else:
+                search_query = f"{vulnerability_title} exploit attack method penetration testing"
+            
+            search_results = await self.tavily_search.ainvoke({"query": search_query})
+            
+            # Extract exploitation-relevant information
+            exploitation_context = []
+            keywords = [
+                'exploit', 'attack', 'proof of concept', 'poc', 'penetration', 
+                'vulnerability assessment', 'metasploit', 'nmap', 'payload',
+                'remote code execution', 'privilege escalation', 'injection',
+                'bypass', 'disclosure', 'unauthorized access'
+            ]
+            
+            for result in search_results:
+                if isinstance(result, dict):
+                    content = result.get('content', '').lower()
+                    url = result.get('url', '')
+                    
+                    # Prioritize security research sources
+                    if any(domain in url for domain in ['exploit-db.com', 'nvd.nist.gov', 'mitre.org', 'github.com']):
+                        weight = 2
+                    else:
+                        weight = 1
+                    
+                    # Extract sentences containing exploitation keywords
+                    sentences = content.split('. ')
+                    relevant_sentences = []
+                    
+                    for sentence in sentences:
+                        keyword_count = sum(1 for keyword in keywords if keyword in sentence)
+                        if keyword_count >= 2:  # Sentence must contain at least 2 exploitation keywords
+                            relevant_sentences.append(sentence.strip())
+                    
+                    if relevant_sentences:
+                        # Take top sentences based on weight
+                        exploitation_context.extend(relevant_sentences[:2 * weight])
+            
+            # Combine and limit the context
+            combined_context = '. '.join(exploitation_context[:3])  # Top 3 most relevant pieces
+            return combined_context[:800]  # Limit length
+            
+        except Exception as e:
+            print(f"Tavily exploitation search error: {e}")
+            return ""
 
     async def _search_cve_context(self, cve_data: Dict) -> str:
         if not cve_data:

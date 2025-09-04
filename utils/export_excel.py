@@ -148,6 +148,7 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                 "Business_Impact": clean_value(risk_assessment.get("business_impact", "")),
                                 "Remediation_Urgency": clean_value(risk_assessment.get("remediation_urgency", "")),
                                 "Risk_Immediate_Actions": immediate_actions_text,
+                                "Exploitation_Methods": clean_value(risk_assessment.get("exploitation_methods", "")),  # NEW
                                 # Add remediation columns
                                 "Remediation_Guide": clean_value(remediation.get("Remediation Guide", "")),
                                 "Remediation_Priority": clean_value(remediation.get("Remediation Priority", "")),
@@ -183,6 +184,7 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                 remediation_summary_rows.append(remediation_summary)
                             
                             # Create risk assessment summary row for separate sheet
+                            # Create risk assessment summary row for separate sheet
                             if risk_assessment:
                                 risk_summary = {
                                     "Asset_IP": clean_value(original_data.get("IP")),
@@ -197,6 +199,7 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                     "Business_Impact": clean_value(risk_assessment.get("business_impact", "")),
                                     "Remediation_Urgency": clean_value(risk_assessment.get("remediation_urgency", "")),
                                     "Immediate_Actions": immediate_actions_text,
+                                    "Exploitation_Methods": clean_value(risk_assessment.get("exploitation_methods", "")),  # NEW
                                 }
                                 risk_assessment_summary_rows.append(risk_summary)
                     else:
@@ -220,6 +223,7 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                             "Business_Impact": "",
                             "Remediation_Urgency": "",
                             "Risk_Immediate_Actions": "",
+                            "Exploitation_Methods": "",  # NEW
                             # Empty remediation columns
                             "Remediation_Guide": "",
                             "Remediation_Priority": "",
