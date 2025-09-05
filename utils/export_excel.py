@@ -310,7 +310,6 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
     return output
 
 
-
 def create_summary_sheet(writer, processed_data: Dict[str, Any], detailed_rows: List[Dict]):
     """Create a summary statistics sheet"""
     try:
@@ -386,8 +385,6 @@ def create_summary_sheet(writer, processed_data: Dict[str, Any], detailed_rows: 
         print(f"Error creating summary sheet: {e}")
         error_df = pd.DataFrame([{"Error": f"Summary creation failed: {str(e)}"}])
         error_df.to_excel(writer, sheet_name="Summary_Statistics", index=False)
-
-
 
 def create_priority_matrix_sheet(writer, detailed_rows: List[Dict]):
     """Create a priority matrix for remediation planning"""

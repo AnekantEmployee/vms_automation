@@ -605,6 +605,7 @@ def main():
         with col2:
             if is_generated_report:
                 try:
+                    # st.write(data)
                     excel_file = export_results_to_excel(data)
                     st.download_button(
                         label="⬇️ Download Report",
