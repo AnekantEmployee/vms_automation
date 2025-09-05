@@ -2,259 +2,131 @@ import time
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
-from pptx.enum.text import MSO_ANCHOR
+from .slide_utils import SlideUtils
 from config_colors import COLORS, FONT_SIZES
 
 def create_slide9(prs: Presentation, slide9_data):
     start_time = time.time()
-
-    # Calculate Part 1 Total dynamically
-    part1_total = 0
-    for row in slide9_data["tables"][0]["rows"]:
-        if "Total" not in row[0]: # Skip any existing total rows
-            immediate_value = row[1].strip() if row[1] else "0"
-            if immediate_value.isdigit():
-                part1_total += int(immediate_value)
-
-    # Calculate Part 2 Total dynamically
-    part2_total = 0
-    for row in slide9_data["tables"][1]["rows"]:
-        if "Total" not in row[0]: # Skip any existing total rows
-            immediate_value = row[1].strip() if row[1] else "0"
-            if immediate_value.isdigit():
-                part2_total += int(immediate_value)
-
-    # Calculate Grand Total
-    grand_total = part1_total + part2_total
-
-    # Create calculated totals
-    part1_total_row = ["Part 1 Total", str(part1_total)]
-    part2_total_row = ["Part 2 Total", str(part2_total)]
-
-    slide_layout = prs.slide_layouts[6] # Blank layout
+    slide_layout = prs.slide_layouts[6]
     slide = prs.slides.add_slide(slide_layout)
+    
+    # Create title bar
+    SlideUtils.create_title_bar(slide, prs, slide9_data["title"])
+    
+    # Calculate totals
+    part1_total, part2_total = _calculate_part_totals(slide9_data)
+    grand_total = part1_total + part2_total
+    
+    # Create side-by-side tables
+    _create_eol_tables(slide, slide9_data, part1_total, part2_total, prs)
+    
+    # Create summary table
+    _create_summary_table(slide, part1_total, part2_total, grand_total, prs)
+    
+    # Print results
+    _print_slide9_results(start_time, part1_total, part2_total, grand_total)
+    return time.time() - start_time
 
-    # Create blue title bar
-    left = Inches(0)
-    top = Inches(0)
-    width = prs.slide_width
-    height = Inches(0.6)
-    shape = slide.shapes.add_shape(1, left, top, width, height) # Rectangle
-    shape.fill.solid()
-    shape.fill.fore_color.rgb = RGBColor(*COLORS["blue"])
-    shape.line.color.rgb = RGBColor(*COLORS["blue"])
+def _calculate_part_totals(slide9_data):
+    """Calculate totals for both parts"""
+    part1_total = sum(int(row[1]) for row in slide9_data["tables"][0]["rows"] 
+                     if "Total" not in row[0] and row[1].strip().isdigit())
+    part2_total = sum(int(row[1]) for row in slide9_data["tables"][1]["rows"] 
+                     if "Total" not in row[0] and row[1].strip().isdigit())
+    return part1_total, part2_total
 
-    # Add title text box
-    title_box = slide.shapes.add_textbox(left, top, width, height)
-    tf = title_box.text_frame
-    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
-    p = tf.paragraphs[0]
-    p.text = slide9_data["title"]
-    p.font.bold = True
-    p.font.size = Pt(FONT_SIZES["title"])
-    p.font.color.rgb = RGBColor(*COLORS["white"])
-    p.alignment = 1 # Center
-
-    # Layout for two tables side by side
+def _create_eol_tables(slide, slide9_data, part1_total, part2_total, prs):
+    """Create EOL tables side by side"""
     mid_point = prs.slide_width // 2
-    left_margin = Inches(0.3)
-    table_width = mid_point - Inches(0.6) # Adjust for margins
-
-    # Helper function to set full blue fill for header and total rows
-    def set_row_blue_full_fill(table, row_idx):
-        """Set entire row to blue background with white bold text"""
-        for cell in table.rows[row_idx].cells:
-            cell.fill.solid()
-            cell.fill.fore_color.rgb = RGBColor(*COLORS["blue"])
-            p = cell.text_frame.paragraphs[0]
-            p.font.bold = True
-            p.font.color.rgb = RGBColor(*COLORS["white"])
-            # FIXED: Use same font size as content for headers
-            p.font.size = Pt(FONT_SIZES["table_data"])
-            if cell.text.isdigit(): # Center align numbers
-                p.alignment = 1
-
-    # Add left table (Part 1) with calculated total
-    t1_data = slide9_data["tables"][0]["rows"]
-    t1_filtered = [row for row in t1_data if "Total" not in row[0]]
-    t1_filtered.append(part1_total_row) # Add calculated total
-    rows_t1 = len(t1_filtered) + 1 # +1 for header
-    cols_t1 = 2
+    table_width = mid_point - Inches(0.6)
     
-    # Calculate table height based on number of rows
-    table1_height = Inches(0.4 + (rows_t1 * 0.35))
-    table1 = slide.shapes.add_table(rows_t1, cols_t1, left_margin, Inches(1), table_width, table1_height).table
-
-    # Set column widths - CONSISTENT ACROSS ALL TABLES
-    table1.columns[0].width = Inches(3.5)
-    table1.columns[1].width = Inches(1.5)
-
-    # Set row heights for table 1
-    table1.rows[0].height = Inches(0.4)  # Header row
-    for i in range(1, rows_t1):
-        table1.rows[i].height = Inches(0.35)  # Data rows
-
-    # Header for table 1
-    header_cells = ["EOL", "Immediate"]
-    for i, col_name in enumerate(header_cells):
-        cell = table1.cell(0, i)
-        cell.text = col_name
-
-    # Data rows for table 1
-    for row_idx, row_data in enumerate(t1_filtered):
-        for col_idx, cell_text in enumerate(row_data):
-            cell = table1.cell(row_idx + 1, col_idx)
-            cell.text = cell_text
-            p = cell.text_frame.paragraphs[0]
-            p.font.size = Pt(FONT_SIZES["table_data"])
-            p.font.color.rgb = RGBColor(*COLORS["black"])
-            # Center align numbers
-            if col_idx == 1:
-                p.alignment = 1
-            # Alternate row coloring for data rows (NOT for total row)
-            if "Total" not in cell_text and row_idx % 2 == 0:
-                cell.fill.solid()
-                cell.fill.fore_color.rgb = RGBColor(*COLORS["very_light_gray"])
-
-    # APPLY FULL BLUE FILL TO HEADER AND TOTAL ROWS OF TABLE 1
-    set_row_blue_full_fill(table1, 0) # Header row
-    set_row_blue_full_fill(table1, len(table1.rows) - 1) # Total row
-
-    # Add right table (Part 2) with calculated total
-    t2_data = slide9_data["tables"][1]["rows"]
-    t2_filtered = [row for row in t2_data if "Total" not in row[0]]
-    t2_filtered.append(part2_total_row) # Add calculated total
-    rows_t2 = len(t2_filtered) + 1 # +1 for header
-    cols_t2 = 2
+    # Left table (Part 1)
+    _create_eol_table(slide, slide9_data["tables"][0], part1_total, "Part 1 Total", 
+                     Inches(0.3), table_width, "table1")
     
-    # Calculate table height based on number of rows
-    table2_height = Inches(0.4 + (rows_t2 * 0.35))
-    table2 = slide.shapes.add_table(rows_t2, cols_t2, mid_point + Inches(0.3), Inches(1), table_width, table2_height).table
+    # Right table (Part 2)
+    _create_eol_table(slide, slide9_data["tables"][1], part2_total, "Part 2 Total",
+                     mid_point + Inches(0.3), table_width, "table2")
 
-    # Set column widths - CONSISTENT ACROSS ALL TABLES
-    table2.columns[0].width = Inches(3.5)
-    table2.columns[1].width = Inches(1.5)
+def _create_eol_table(slide, table_data, total, total_label, left, width, table_id):
+    """Create individual EOL table with totals"""
+    filtered_data = [row for row in table_data["rows"] if "Total" not in row[0]]
+    data_with_total = filtered_data + [[total_label, str(total)]]
+    
+    table = SlideUtils.create_table_with_headers(slide, len(data_with_total) + 1, 2,
+                                               left, Inches(1), width, Inches(4.5))
+    
+    SlideUtils.set_table_column_widths(table, [Inches(3.5), Inches(1.5)])
+    SlideUtils.set_table_row_heights(table, Inches(0.4), Inches(0.35))
+    SlideUtils.format_header_row(table, ["EOL", "Immediate"])
+    
+    # Custom population for EOL tables with special formatting
+    _populate_eol_table_data(table, data_with_total)
 
-    # Set row heights for table 2
-    table2.rows[0].height = Inches(0.4)  # Header row
-    for i in range(1, rows_t2):
-        table2.rows[i].height = Inches(0.35)  # Data rows
-
-    # Header for table 2
-    for i, col_name in enumerate(header_cells):
-        cell = table2.cell(0, i)
-        cell.text = col_name
-
-    # Data rows for table 2
-    for row_idx, row_data in enumerate(t2_filtered):
-        for col_idx, cell_text in enumerate(row_data):
-            cell = table2.cell(row_idx + 1, col_idx)
-            cell.text = cell_text
-            p = cell.text_frame.paragraphs[0]
-            p.font.size = Pt(FONT_SIZES["table_data"])
-            p.font.color.rgb = RGBColor(*COLORS["black"])
-            # Center align numbers
-            if col_idx == 1:
-                p.alignment = 1
-            # Alternate row coloring for data rows (NOT for total row)
-            if "Total" not in cell_text and row_idx % 2 == 0:
+def _populate_eol_table_data(table, data_rows):
+    """Populate EOL table with special blue formatting for totals"""
+    for row_idx, row_data in enumerate(data_rows):
+        table_row_idx = row_idx + 1
+        for col_idx, cell_data in enumerate(row_data):
+            cell = table.cell(table_row_idx, col_idx)
+            is_total = "Total" in str(row_data[0])
+            
+            if is_total:
+                # Blue background for total rows
                 cell.fill.solid()
-                cell.fill.fore_color.rgb = RGBColor(*COLORS["very_light_gray"])
+                cell.fill.fore_color.rgb = RGBColor(*COLORS["blue"])
+                cell.text = str(cell_data)
+                p = cell.text_frame.paragraphs[0]
+                p.font.bold = True
+                p.font.color.rgb = RGBColor(*COLORS["white"])
+                p.font.size = Pt(FONT_SIZES["table_data"])
+                if col_idx == 1:  # Numbers
+                    p.alignment = 1
+            else:
+                # Regular data formatting
+                SlideUtils.format_data_cell(cell, cell_data, col_idx, row_idx, False)
 
-    # APPLY FULL BLUE FILL TO HEADER AND TOTAL ROWS OF TABLE 2
-    set_row_blue_full_fill(table2, 0) # Header row
-    set_row_blue_full_fill(table2, len(table2.rows) - 1) # Total row
-
-    # Add summary table with calculated totals
+def _create_summary_table(slide, part1_total, part2_total, grand_total, prs):
+    """Create summary totals table"""
     summary_data = [
         ["Part 1 Total", str(part1_total)],
         ["Part 2 Total", str(part2_total)],
         ["Grand Total", str(grand_total)]
     ]
-
-    rows_sum = len(summary_data) + 1 # +1 for header
-    cols_sum = 2
     
-    # Calculate summary table position and height
-    summary_top = Inches(1) + max(table1_height, table2_height) + Inches(0.3)
-    summary_height = Inches(0.4 + (rows_sum * 0.35))
-    sum_table = slide.shapes.add_table(rows_sum, cols_sum, left_margin, summary_top, table_width, summary_height).table
+    table = SlideUtils.create_table_with_headers(slide, 4, 2, Inches(0.3), Inches(5.8), 
+                                               prs.slide_width // 2 - Inches(0.6), Inches(1.2))
+    
+    SlideUtils.set_table_column_widths(table, [Inches(3.5), Inches(1.5)])
+    SlideUtils.set_table_row_heights(table, Inches(0.4), Inches(0.35))
+    SlideUtils.format_header_row(table, ["EOL", "Immediate"])
+    
+    # Custom formatting for summary table
+    _format_summary_table(table, summary_data)
 
-    # Set column widths for summary table - SAME AS OTHER TABLES
-    sum_table.columns[0].width = Inches(3.5)
-    sum_table.columns[1].width = Inches(1.5)
+def _format_summary_table(table, summary_data):
+    """Apply custom formatting to summary table"""
+    colors = [COLORS["very_light_gray"], COLORS["very_light_gray"], COLORS["blue"]]
+    font_colors = [COLORS["black"], COLORS["black"], COLORS["white"]]
+    bold_flags = [False, False, True]
+    
+    for row_idx, (row_data, color, font_color, bold) in enumerate(zip(summary_data, colors, font_colors, bold_flags)):
+        for col_idx, cell_data in enumerate(row_data):
+            cell = table.cell(row_idx + 1, col_idx)
+            cell.text = str(cell_data)
+            cell.fill.solid()
+            cell.fill.fore_color.rgb = RGBColor(*color)
+            
+            p = cell.text_frame.paragraphs[0]
+            p.font.bold = bold
+            p.font.size = Pt(FONT_SIZES["table_data"])
+            p.font.color.rgb = RGBColor(*font_color)
+            if col_idx == 1:  # Numbers
+                p.alignment = 1
 
-    # Set row heights for summary table
-    sum_table.rows[0].height = Inches(0.4)  # Header row
-    for i in range(1, rows_sum):
-        sum_table.rows[i].height = Inches(0.35)  # Data rows
-
-    # Header for summary table
-    for i, col_name in enumerate(header_cells):
-        cell = sum_table.cell(0, i)
-        cell.text = col_name
-
-    # Data rows for summary table
-    for row_idx, row_data in enumerate(summary_data):
-        for col_idx, cell_text in enumerate(row_data):
-            cell = sum_table.cell(row_idx + 1, col_idx)
-            cell.text = cell_text
-
-    # Row 0 (header) - Blue
-    for cell in sum_table.rows[0].cells:
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = RGBColor(*COLORS["blue"])
-        p = cell.text_frame.paragraphs[0]
-        p.font.bold = True
-        p.font.size = Pt(FONT_SIZES["table_data"])
-        p.font.color.rgb = RGBColor(*COLORS["white"])
-        p.space_before = Pt(0)
-        p.space_after = Pt(0)
-        if cell.text.isdigit():
-            p.alignment = 1
-
-    # Row 1 (Part 1 Total) - Light Grey
-    for cell in sum_table.rows[1].cells:
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = RGBColor(*COLORS["very_light_gray"])
-        p = cell.text_frame.paragraphs[0]
-        p.font.bold = False
-        p.font.size = Pt(FONT_SIZES["table_data"])
-        p.font.color.rgb = RGBColor(*COLORS["black"])
-        p.space_before = Pt(0)
-        p.space_after = Pt(0)
-        if cell.text.isdigit():
-            p.alignment = 1
-
-    # Row 2 (Part 2 Total) - Light Blue
-    for cell in sum_table.rows[2].cells:
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = RGBColor(*COLORS["very_light_gray"])
-        p = cell.text_frame.paragraphs[0]
-        p.font.bold = False
-        p.font.size = Pt(FONT_SIZES["table_data"])
-        p.font.color.rgb = RGBColor(*COLORS["black"])
-        p.space_before = Pt(0)
-        p.space_after = Pt(0)
-        if cell.text.isdigit():
-            p.alignment = 1
-
-    # Row 3 (Grand Total) - Blue
-    for cell in sum_table.rows[3].cells:
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = RGBColor(*COLORS["blue"])
-        p = cell.text_frame.paragraphs[0]
-        p.font.bold = True
-        p.font.size = Pt(FONT_SIZES["table_data"])
-        p.font.color.rgb = RGBColor(*COLORS["white"])
-        p.space_before = Pt(0)
-        p.space_after = Pt(0)
-        if cell.text.isdigit():
-            p.alignment = 1
-
-    end_time = time.time()
-    runtime = end_time - start_time
+def _print_slide9_results(start_time, part1_total, part2_total, grand_total):
+    """Print slide 9 results"""
+    runtime = time.time() - start_time
     print(f"Slide 9 created successfully!")
     print(f"Calculated Totals - Part 1: {part1_total}, Part 2: {part2_total}, Grand Total: {grand_total}")
     print(f"Runtime: {runtime:.4f} seconds")
-    return runtime

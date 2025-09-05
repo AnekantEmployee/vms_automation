@@ -212,9 +212,10 @@ def create_slide2(prs: Presentation, slide2_data):
                 cell.fill.solid()
                 cell.fill.fore_color.rgb = RGBColor(*COLORS["very_light_gray"])
 
-    # Legends section
-    legends_top = Inches(2.8)
-    legends_box = slide.shapes.add_textbox(right_table_left, legends_top, right_table_width, Inches(1.0))
+    # **FIXED POSITIONING - Legends section**
+    # Position after vulnerability table (0.8" + 1.8" = 2.6") + gap
+    legends_top = Inches(2.8)  
+    legends_box = slide.shapes.add_textbox(right_table_left, legends_top, right_table_width, Inches(0.8))  # Reduced height
     legends_tf = legends_box.text_frame
 
     # Legends title
@@ -229,11 +230,14 @@ def create_slide2(prs: Presentation, slide2_data):
         legend_p.font.size = Pt(8)
         legend_p.space_before = Pt(3)
 
-    # Timeline table
-    timeline_top = Inches(4.0)
+    # **FIXED POSITIONING - Timeline table**
+    # Position after legends (2.8" + 0.8" = 3.6") + gap
+    timeline_top = Inches(4.25)  # Moved down to avoid overlap
     timeline_rows = len(slide2_data["timeline"]["rows"]) + 1
     timeline_cols = len(slide2_data["timeline"]["columns"])
-    timeline_table = slide.shapes.add_table(timeline_rows, timeline_cols, table_left, timeline_top, max_table_width, Inches(2.4)).table
+    
+    # **REDUCED TABLE HEIGHT** to fit in remaining space
+    timeline_table = slide.shapes.add_table(timeline_rows, timeline_cols, table_left, timeline_top, max_table_width, Inches(2.0)).table  # Reduced from 2.4 to 2.0
 
     # Set timeline column widths
     timeline_table.columns[0].width = Inches(1.6) # Severity
@@ -241,10 +245,10 @@ def create_slide2(prs: Presentation, slide2_data):
     timeline_table.columns[2].width = Inches(2.2) # Timeline
     timeline_table.columns[3].width = Inches(6.5) # Description
 
-    # Set row heights for timeline table
-    timeline_table.rows[0].height = Inches(0.4)  # Header row
+    # **REDUCED ROW HEIGHTS** to fit more content
+    timeline_table.rows[0].height = Inches(0.35)  # Header row (reduced)
     for i in range(1, timeline_rows):
-        timeline_table.rows[i].height = Inches(0.4)  # Data rows
+        timeline_table.rows[i].height = Inches(0.32)  # Data rows (reduced)
 
     # Timeline header
     for i, col_name in enumerate(slide2_data["timeline"]["columns"]):
@@ -281,8 +285,9 @@ def create_slide2(prs: Presentation, slide2_data):
                 p.font.color.rgb = RGBColor(*COLORS["white"])
                 p.alignment = 1
 
-    # Disclaimer
-    disclaimer_box = slide.shapes.add_textbox(table_left, Inches(6.8), max_table_width, Inches(0.3))
+    # **FIXED POSITIONING - Disclaimer**
+    # Position after timeline table (3.8" + 2.0" = 5.8") + small gap
+    disclaimer_box = slide.shapes.add_textbox(table_left, Inches(5.9), max_table_width, Inches(0.3))
     disclaimer_tf = disclaimer_box.text_frame
     disclaimer_p = disclaimer_tf.paragraphs[0]
     disclaimer_p.text = f"Disclaimer – {slide2_data['disclaimer']}"
