@@ -22,19 +22,18 @@ def main(*slide_data):
     prs.slide_height = Inches(7.5)
 
     # Create slides
-    slide_functions = [create_slide1, create_slide2, create_slide3, create_slide4, create_slide5,
-                      create_slide6, create_slide7, create_slide8, create_slide9, create_slide10]
+    slide_functions = [create_slide1, create_slide2, create_slide3, create_slide4, create_slide5, create_slide6, create_slide7, create_slide8, create_slide9, create_slide10]
     
     for i, (func, data) in enumerate(zip(slide_functions, slide_data), 1):
         print(f"Creating Slide {i}...")
         func(prs, data)
 
     # Save presentation
-    prs.save("Vulnerability_Management_Presentation.pptx")
+    prs.save("Test Report 1.pptx")
     
     runtime = time.time() - start_time
     print(f"\n✅ Presentation created! 📊 10 slides ⏱️ {runtime:.4f}s")
-    print(f"💾 File: Vulnerability_Management_Presentation.pptx")
+    print(f"💾 File: Test Report 1.pptx")
 
 if __name__ == "__main__":
     main(slide1_data, slide2_data, slide3_data, slide4_data, slide5_data, 
