@@ -421,5 +421,4 @@ if __name__ == "__main__":
     print(f"Total slides: {len(slide_data)}")
     
     # Call the main PPT generation function
-    main(slide_data[0], slide_data[1], slide_data[2], slide_data[3], slide_data[4], 
-         slide_data[5], slide_data[6], slide_data[7], slide_data[8], slide_data[9])
+    main(*slide_data[:10])
