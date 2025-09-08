@@ -13,6 +13,7 @@ from slides.slide8 import create_slide8
 from slides.slide9 import create_slide9
 from slides.slide10 import create_slide10
 
+
 def main(*slide_data):
     start_time = time.time()
     
@@ -22,18 +23,38 @@ def main(*slide_data):
     prs.slide_height = Inches(7.5)
 
     # Create slides
-    slide_functions = [create_slide1, create_slide2, create_slide3, create_slide4, create_slide5, create_slide6, create_slide7, create_slide8, create_slide9, create_slide10]
+    slide_functions = [create_slide1, create_slide2, create_slide3, create_slide4, create_slide5, 
+                      create_slide6, create_slide7, create_slide8, create_slide9, create_slide10]
+    
+    total_slides_created = 0
     
     for i, (func, data) in enumerate(zip(slide_functions, slide_data), 1):
         print(f"Creating Slide {i}...")
-        func(prs, data)
+        
+        # Handle special case for slide3 which may return multiple slides
+        if func in [create_slide3, create_slide4, create_slide7, create_slide8]:
+            result = func(prs, data)
+            
+            # Check if create_slide3 returned multiple slides (tuple with slides list and runtime)
+            if isinstance(result, tuple) and len(result) == 2:
+                slides_created, slide_runtime = result
+                total_slides_created += len(slides_created)
+                print(f"  ↳ Created {len(slides_created)} slides for vulnerability analysis")
+            else:
+                # Fallback - single slide returned
+                total_slides_created += 1
+        else:
+            # Regular slide creation
+            func(prs, data)
+            total_slides_created += 1
 
     # Save presentation
     prs.save("Test Report 2.pptx")
     
     runtime = time.time() - start_time
-    print(f"\n✅ Presentation created! 📊 10 slides ⏱️ {runtime:.4f}s")
-    print(f"💾 File: Test Report 1.pptx")
+    print(f"\n✅ Presentation created! 📊 {total_slides_created} slides ⏱️ {runtime:.4f}s")
+    print(f"💾 File: Test Report 2.pptx")
+
 
 if __name__ == "__main__":
     main(slide1_data, slide2_data, slide3_data, slide4_data, slide5_data, 

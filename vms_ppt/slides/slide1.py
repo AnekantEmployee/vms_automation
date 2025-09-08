@@ -38,7 +38,7 @@ def _create_agenda_box(slide, prs, agenda_points):
     
     # Add title
     agenda_title_p = agenda_tf.paragraphs[0]
-    agenda_title_p.text = "Agenda"
+    agenda_title_p.text = "Overview"
     agenda_title_p.font.bold = True
     agenda_title_p.font.size = Pt(FONT_SIZES["agenda_title"])
     agenda_title_p.font.color.rgb = RGBColor(*COLORS["black"])

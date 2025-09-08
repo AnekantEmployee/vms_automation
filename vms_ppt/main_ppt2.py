@@ -357,7 +357,6 @@ def transform_vulnerability_data_to_slides(data_json_path: str) -> list:
     }
     slide_data_list.append(slide6_data)
     
-    # ====== SLIDES 7-10: Detailed Implementation Plans ======
     
     # SLIDE 7: Critical Actions
     critical_actions = []
