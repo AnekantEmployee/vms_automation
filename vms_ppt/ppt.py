@@ -29,7 +29,7 @@ def main(*slide_data):
         func(prs, data)
 
     # Save presentation
-    prs.save("Test Report 1.pptx")
+    prs.save("Test Report 2.pptx")
     
     runtime = time.time() - start_time
     print(f"\n✅ Presentation created! 📊 10 slides ⏱️ {runtime:.4f}s")

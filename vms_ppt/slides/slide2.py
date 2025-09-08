@@ -153,7 +153,7 @@ def create_slide2(prs: Presentation, slide2_data):
                 p.alignment = 1
 
     # Footnote 2
-    footnote2_box = slide.shapes.add_textbox(table_left, Inches(3.9), left_table_width, Inches(0.3))
+    footnote2_box = slide.shapes.add_textbox(table_left, Inches(4.55), left_table_width, Inches(0.3))
     footnote2_tf = footnote2_box.text_frame
     footnote2_p = footnote2_tf.paragraphs[0]
     footnote2_p.text = slide2_data["baselining_failures"]["footnote"]
@@ -214,7 +214,7 @@ def create_slide2(prs: Presentation, slide2_data):
 
     # **FIXED POSITIONING - Legends section**
     # Position after vulnerability table (0.8" + 1.8" = 2.6") + gap
-    legends_top = Inches(2.8)  
+    legends_top = Inches(3)  
     legends_box = slide.shapes.add_textbox(right_table_left, legends_top, right_table_width, Inches(0.8))  # Reduced height
     legends_tf = legends_box.text_frame
 
@@ -232,7 +232,7 @@ def create_slide2(prs: Presentation, slide2_data):
 
     # **FIXED POSITIONING - Timeline table**
     # Position after legends (2.8" + 0.8" = 3.6") + gap
-    timeline_top = Inches(4.25)  # Moved down to avoid overlap
+    timeline_top = Inches(4.85)  # Moved down to avoid overlap
     timeline_rows = len(slide2_data["timeline"]["rows"]) + 1
     timeline_cols = len(slide2_data["timeline"]["columns"])
     
@@ -287,7 +287,7 @@ def create_slide2(prs: Presentation, slide2_data):
 
     # **FIXED POSITIONING - Disclaimer**
     # Position after timeline table (3.8" + 2.0" = 5.8") + small gap
-    disclaimer_box = slide.shapes.add_textbox(table_left, Inches(5.9), max_table_width, Inches(0.3))
+    disclaimer_box = slide.shapes.add_textbox(table_left, Inches(6.5), max_table_width, Inches(0.3))
     disclaimer_tf = disclaimer_box.text_frame
     disclaimer_p = disclaimer_tf.paragraphs[0]
     disclaimer_p.text = f"Disclaimer – {slide2_data['disclaimer']}"
