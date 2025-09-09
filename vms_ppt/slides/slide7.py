@@ -6,7 +6,7 @@ from pptx.dml.color import RGBColor
 
 
 def create_slide7(prs: Presentation, slide7_data):
-    """Create slide(s) for Stage 1 Windows Patching with pagination"""
+    """Create slide(s) for Stage 1 Critical Vulnerability Response with business impact column"""
     start_time = time.time()
     
     # Check if we need to split into multiple slides
@@ -34,9 +34,8 @@ def create_slide7(prs: Presentation, slide7_data):
     
     return slides_created, time.time() - start_time
 
-
 def _create_patching_slides(prs, slide7_data, patching_data, max_rows):
-    """Create one or more slides for Windows patching data"""
+    """Create one or more slides for critical vulnerability data with business impact column"""
     if not patching_data or len(patching_data) == 0:
         return []
     
@@ -58,7 +57,7 @@ def _create_patching_slides(prs, slide7_data, patching_data, max_rows):
         layout = SlideUtils.get_standard_layout_params(prs)
         
         # Create subtitle with item range
-        subtitle = f"Stage 1 Windows Patching Details ({len(patching_data)} total items)"
+        subtitle = f"Critical Vulnerability Response Items ({len(patching_data)} total items)"
         if len(patching_chunks) > 1:
             start_idx = chunk_idx * max_rows + 1
             end_idx = min((chunk_idx + 1) * max_rows, len(patching_data))
@@ -67,34 +66,56 @@ def _create_patching_slides(prs, slide7_data, patching_data, max_rows):
         SlideUtils.create_subtitle(slide, layout['table_left'], Inches(0.8), 
                                  layout['max_table_width'], subtitle)
         
-        # Calculate totals for this chunk
-        chunk_totals = SlideUtils.calculate_column_totals(chunk, 
-                                                        len(slide7_data["table"]["columns"]), 
-                                                        "Page Total")
+        # Calculate totals for this chunk (8 columns total including business impact)
+        chunk_totals = SlideUtils.calculate_column_totals(chunk, 8, "Page Total")
         
-        # Create table
+        # Create table (8 columns total including business impact)
         data_with_totals = chunk + [chunk_totals]
         table = SlideUtils.create_table_with_headers(slide, len(data_with_totals) + 1, 
-                                                   len(slide7_data["table"]["columns"]),
+                                                   8,  # 8 columns total
                                                    layout['table_left'], Inches(1.2), 
                                                    layout['max_table_width'], Inches(4.8))
         
-        # Set column widths for OS patching table
-        column_widths = [Inches(5.55), Inches(1.23), Inches(1.54), Inches(1.23), Inches(1.23), Inches(1.54)]
-        SlideUtils.set_table_column_widths(table, column_widths)
-        SlideUtils.set_table_row_heights(table, Inches(0.35), Inches(0.3))
+        # UPDATED COLUMN WIDTHS - Including Business Impact column
+        column_widths = [
+            Inches(2.0),   # Asset & Network Location (16%)
+            Inches(2.7),   # Vulnerability Description (16%)
+            Inches(0.7),   # Critical (4%)
+            Inches(0.7),   # High (4%)
+            Inches(0.8),   # Medium (4%)
+            Inches(0.7),   # Low (4%)
+            Inches(2.5),   # CVE IDs & CVSS Score (16%)
+            Inches(2)    # Business Impact Context (20%) - ADDED BACK
+        ]
+        
+        # Use safe column width setting
+        _set_column_widths_safe(table, column_widths)
+        
+        SlideUtils.set_table_row_heights(table, Inches(0.35), Inches(0.32))
         SlideUtils.format_header_row(table, slide7_data["table"]["columns"])
         SlideUtils.populate_table_data(table, data_with_totals)
         
         # Add footer with navigation info
         if len(patching_chunks) > 1:
-            footer_text = f"Windows Patching Details - Page {chunk_idx + 1} of {len(patching_chunks)}"
+            footer_text = f"Critical Vulnerability Response - Page {chunk_idx + 1} of {len(patching_chunks)}"
             SlideUtils.create_footnote(slide, layout['table_left'], Inches(6.2), 
                                      layout['max_table_width'], footer_text, font_size=10)
         
         slides_created.append(slide)
     
     return slides_created
+
+
+def _set_column_widths_safe(table, widths):
+    """Safely set column widths ensuring they are integers"""
+    for i, width in enumerate(widths):
+        if i < len(table.columns):
+            # Convert to int to avoid TypeError
+            if hasattr(width, 'value'):  # Handle Inches objects
+                width_value = int(width)
+            else:
+                width_value = int(width)
+            table.columns[i].width = width_value
 
 
 def _create_patching_summary_slide(prs, slide7_data, patching_data):
@@ -108,26 +129,25 @@ def _create_patching_summary_slide(prs, slide7_data, patching_data):
     # Get layout parameters
     layout = SlideUtils.get_standard_layout_params(prs)
     
-    # Calculate overall totals
-    overall_totals = SlideUtils.calculate_column_totals(patching_data, 
-                                                      len(slide7_data["table"]["columns"]), 
-                                                      "Grand Total")
+    # Calculate overall totals (8 columns including business impact)
+    overall_totals = SlideUtils.calculate_column_totals(patching_data, 8, "Grand Total")
     
     # Create summary statistics table
     summary_data = [
         ["Metric", "Value"],
-        ["Total Operating Systems", str(len(patching_data))],
-        ["Immediate Priority Patches", str(overall_totals[1])],
-        ["Critical Priority Patches", str(overall_totals[2])],
-        ["High Priority Patches", str(overall_totals[3])],
-        ["Medium Priority Patches", str(overall_totals[4])],
-        ["Total Patches Required", str(overall_totals[5])]
+        ["Total Critical Assets", str(len(patching_data))],
+        ["Critical Vulnerabilities", str(overall_totals[2]) if len(overall_totals) > 2 else "0"],
+        ["High Priority Vulnerabilities", str(overall_totals[3]) if len(overall_totals) > 3 else "0"],
+        ["Medium Priority Vulnerabilities", str(overall_totals[4]) if len(overall_totals) > 4 else "0"],
+        ["Low Priority Vulnerabilities", str(overall_totals[5]) if len(overall_totals) > 5 else "0"],
+        ["CVE IDs Identified", "Multiple - See Details"],
+        ["Business Impact Areas", str(len(set(row[7] for row in patching_data if len(row) > 7 and row[7])))]  # Count unique business impacts
     ]
     
     # Create summary table
     table = SlideUtils.create_table_with_headers(slide, len(summary_data), 2, 
                                                layout['table_left'], Inches(1.2), 
-                                               Inches(8.0), Inches(2.5))
+                                               Inches(8.0), Inches(2.8))
     
     column_widths = [Inches(4.0), Inches(4.0)]
     SlideUtils.set_table_column_widths(table, column_widths)
@@ -136,19 +156,19 @@ def _create_patching_summary_slide(prs, slide7_data, patching_data):
     SlideUtils.populate_table_data(table, summary_data[1:])
     
     # Add key findings text box
-    findings_text = f"""Key Findings - Stage 1 Windows Patching:
-• {len(patching_data)} operating systems require patching attention
-• {overall_totals[1]} immediate priority patches need urgent deployment
-• {overall_totals[2]} critical patches require deployment within 48 hours
-• {overall_totals[5]} total patches identified across all systems
-• Detailed OS-specific breakdown available in following slides"""
+    findings_text = f"""Key Findings - Critical Vulnerability Response:
+• {len(patching_data)} critical assets requiring immediate remediation
+• Multiple CVE IDs identified with varying CVSS scores
+• Business impact assessment completed for each vulnerability
+• Asset-specific network location and service context provided
+• Detailed breakdown available in following slides for operational teams"""
     
-    findings_box = slide.shapes.add_textbox(layout['table_left'], Inches(4.0), 
-                                          layout['max_table_width'], Inches(2.0))
+    findings_box = slide.shapes.add_textbox(layout['table_left'], Inches(4.2), 
+                                          layout['max_table_width'], Inches(1.8))
     findings_tf = findings_box.text_frame
     findings_tf.text = findings_text
     for paragraph in findings_tf.paragraphs:
-        paragraph.font.size = Pt(12)
+        paragraph.font.size = Pt(11)
         paragraph.font.color.rgb = RGBColor(0, 0, 0)
     
     return slide
@@ -164,10 +184,10 @@ def _print_slide7_results(start_time, patching_data, slides_created):
     """Print enhanced slide 7 results with pagination info"""
     runtime = time.time() - start_time
     print(f"Slide 7 series created successfully!")
-    print(f"Windows patching items: {len(patching_data)} operating systems")
+    print(f"Critical vulnerability items: {len(patching_data)} assets")
     print(f"Total slides created: {slides_created}")
     
     if len(patching_data) > 10:
-        print(f"✓ Windows patching data split across multiple slides for readability")
+        print(f"✓ Critical vulnerability data split across multiple slides for readability")
         
     print(f"Runtime: {runtime:.4f} seconds")
