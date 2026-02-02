@@ -100,6 +100,7 @@ def find_header_row(df: pd.DataFrame) -> int:
             return idx
     return -1
 
+
 async def process_single_vulnerability_async(
     idx: int,
     row: pd.Series,
@@ -121,14 +122,34 @@ async def process_single_vulnerability_async(
         return None, "skipped_type"
     
     try:
-        cve_results = combined_cve_search(title, max_results_per_vuln)
+        # ========== MODIFICATION START ==========
+        # Prepare vulnerability context for CVE validation
+        vulnerability_context = {
+            "Title": title,
+            "Operating System": str(row.get("OS", "Unknown")),
+            "QID": str(row.get("QID", "")),
+            "Asset Name": str(row.get("DNS", "")),
+            "Asset IP": str(row.get("IP", "")),
+            "Severity": str(row.get("Severity", "")),
+            "Category": str(row.get("Category", "")),
+            "Type": vuln_type
+        }
+        
+        # Call CVE search with context for validation
+        cve_results = combined_cve_search(
+            title, 
+            max_results_per_vuln,
+            vulnerability_context=vulnerability_context  # Pass context
+        )
+        # ========== MODIFICATION END ==========
+        
         original_data = {col: str(row.get(col, "")) for col in row.index}
         
         if cve_results:
             severity_counts = {}
             total_score = score_count = 0
             remediation_data = []
-            risk_assessment_data = []  # New: Array for risk assessments
+            risk_assessment_data = []  # Array for risk assessments
             
             # Process each CVE and get remediation data
             for cve in cve_results:
@@ -161,7 +182,6 @@ async def process_single_vulnerability_async(
                 # Get risk assessment for this specific CVE
                 try:
                     risk_assessment = await get_vulnerability_risk_assessment(original_data, cve_data)
-                    # risk_assessment_dict = risk_assessment.to_dict() if hasattr(risk_assessment, 'to_dict') else vars(risk_assessment)
                     risk_assessment_data.append({
                         "cve_id": cve.cve_id,
                         "risk_assessment": risk_assessment
@@ -201,61 +221,76 @@ async def process_single_vulnerability_async(
                     remediation_data.append({
                         "cve_id": cve.cve_id,
                         "remediation": {
-                            "Remediation Guide": f"Please refer to vendor documentation for CVE {cve.cve_id} remediation steps.",
-                            "Remediation Priority": "Medium",
-                            "Estimated Effort": "Manual assessment required",
-                            "Reference Links": f"https://nvd.nist.gov/vuln/detail/{cve.cve_id}",
-                            "Additional Resources": "https://nvd.nist.gov/",
-                            "Immediate Actions": "• Check for available patches\\n• Monitor for exploitation attempts",
-                            "Detailed Steps": "1. Consult vendor security advisories\\n2. Apply recommended patches",
-                            "Verification Steps": "• Verify patch installation\\n• Test system functionality",
-                            "Rollback Plan": "• Maintain system backups\\n• Test rollback procedure",
+                            "exploitation_methods": f"Exploitation details unavailable for CVE {cve.cve_id}",
+                            "remediation_guide": "Please refer to vendor security advisories",
+                            "remediation_priority": "Medium",
+                            "estimated_effort": "2-6 hours depending on system complexity",
+                            "immediate_actions": [
+                                "• Apply vendor security patches immediately",
+                                "• Review and harden system configuration",
+                                "• Enable security monitoring and alerting"
+                            ],
+                            "detailed_steps": [
+                                "1. Check vendor advisories for security patches",
+                                "2. Test patches in staging environment",
+                                "3. Apply patches during maintenance window",
+                                "4. Verify patch installation success",
+                                "5. Monitor system for proper functionality"
+                            ],
+                            "verification_steps": [
+                                "• Verify remediation has been applied successfully",
+                                "• Run vulnerability scanner to confirm fix",
+                                "• Test critical system functionality",
+                                "• Document remediation for compliance audit"
+                            ],
+                            "rollback_plan": [
+                                "• Maintain complete system backups before changes",
+                                "• Document all configuration modifications",
+                                "• Test rollback procedures in staging environment",
+                                "• Keep previous configurations for quick restoration"
+                            ],
+                            "reference_links": [
+                                f"https://nvd.nist.gov/vuln/detail/{cve.cve_id}"
+                            ],
+                            "additional_resources": [
+                                "https://nvd.nist.gov/",
+                                "https://cve.mitre.org/",
+                                "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+                            ]
                         }
                     })
             
-            result = {
-                "original_row": idx + header_row + 2,  # +2 for 0-based index + header
-                "original_data": original_data,
+            # Return enhanced result with CVE data, remediation, and risk assessment
+            return {
+                "row_index": idx + header_row + 1,
                 "title": title,
-                "type": vuln_type,
                 "cve_count": len(cve_results),
-                "cve_results": cve_results,
-                "risk_assessment_data": risk_assessment_data,  # New: Array of risk assessments for each CVE
-                "remediation_data": remediation_data,  # Array of remediation data for each CVE
-                "severity_summary": severity_counts,
-                "avg_cvss_score": total_score / score_count if score_count > 0 else 0,
-                "highest_score": max(cve.score for cve in cve_results),
-                "processed_at": datetime.now().isoformat(),
-            }
-            return result, "success"
-        else:
-            result = {
-                "original_row": idx + header_row + 2,
                 "original_data": original_data,
+                "cve_results": cve_results,
+                "remediation_data": remediation_data,
+                "risk_assessment_data": risk_assessment_data,
+                "severity_summary": dict(severity_counts),
+                "avg_score": total_score / score_count if score_count > 0 else 0
+            }, "success"
+        else:
+            return {
+                "row_index": idx + header_row + 1,
                 "title": title,
-                "type": vuln_type,
                 "cve_count": 0,
+                "original_data": original_data,
                 "cve_results": [],
-                "risk_assessment_data": [],  # Empty array when no CVEs found
-                "remediation_data": [],  # Empty array when no CVEs found
+                "remediation_data": [],
+                "risk_assessment_data": [],
                 "severity_summary": {},
-                "avg_cvss_score": 0,
-                "highest_score": 0,
-                "processed_at": datetime.now().isoformat(),
-            }
-            return result, "success_no_cves"
+                "avg_score": 0
+            }, "no_cves"
+            
     except Exception as e:
-        error_result = {
-            "original_row": idx + header_row + 2,
-            "original_data": original_data,
-            "title": title,
-            "type": vuln_type,
-            "risk_assessment_data": [],  # Empty array on error
-            "remediation_data": [],  # Empty array on error
-            "error": str(e),
-            "processed_at": datetime.now().isoformat(),
-        }
-        return error_result, "error"
+        print(f"Error processing row {idx}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None, "error"
+
 
 def process_single_vulnerability(
     idx: int,

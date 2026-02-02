@@ -1,5 +1,6 @@
 import re
 import json
+import sys
 import time
 import requests
 import urllib.parse
@@ -7,7 +8,7 @@ import concurrent.futures
 from threading import Lock
 from bs4 import BeautifulSoup
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Tuple, TypedDict, Annotated
+from typing import List, Dict, Any, TypedDict, Annotated
 import os
 from dotenv import load_dotenv
 
@@ -26,6 +27,17 @@ try:
 except ImportError:
     TAVILY_AVAILABLE = False
     print("TavilySearch not available - continuing without it")
+    
+# Add the project root to path so we can import cve_validator
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from cve_validator import CVEValidator
+    CVE_VALIDATION_ENABLED = True
+    print("✅ CVE Validation enabled")
+except ImportError:
+    CVE_VALIDATION_ENABLED = False
+    print("⚠️ CVE Validation not available - install cve_validator.py")
 
 # Load environment variables
 load_dotenv()
@@ -81,6 +93,9 @@ class CVEResult:
 class CVESearchState(TypedDict):
     messages: Annotated[list, add_messages]
     original_query: str
+    os_context: str  # NEW: OS/platform context for validation
+    qid: str  # NEW: QID for specific validation rules
+    asset_info: Dict[str, str]  # NEW: Additional asset context
     enhanced_queries: List[str]
     search_results: List[Dict]
     cve_results: List[CVEResult]
@@ -254,22 +269,86 @@ def external_search_node(state: CVESearchState) -> CVESearchState:
             "messages": state["messages"] + [AIMessage(content=f"External search failed: {str(e)}")]
         }
 
-
 def result_scorer_node(state: CVESearchState) -> CVESearchState:
-    print("\n--- Scoring and Ranking Results ---")
+    """Enhanced scoring with CVE validation"""
+    print("\n--- Scoring, Validating, and Ranking Results ---")
+    
     if not state['cve_results']:
         print("No CVE results to score.")
         return state
     
-    print(f"Scoring {len(state['cve_results'])} CVE results...")
-    for result in state['cve_results']:
-        result.confidence_score = calculate_relevance_score(result, state['original_query'])
+    print(f"Processing {len(state['cve_results'])} CVE results...")
     
-    state['cve_results'].sort(key=lambda x: (x.confidence_score, x.score), reverse=True)
-    print("CVE results scored and ranked successfully.")
+    # Get vulnerability context for validation
+    vulnerability_context = {
+        "Title": state.get('original_query', ''),
+        "Operating System": state.get('os_context', 'Unknown'),
+        "QID": state.get('qid', ''),
+        **state.get('asset_info', {})
+    }
+    
+    # Initialize validator if available
+    validator = None
+    if CVE_VALIDATION_ENABLED:
+        validator = CVEValidator()
+        print("Using CVE validation")
+    else:
+        print("CVE validation not available, using basic scoring only")
+    
+    validated_results = []
+    filtered_count = 0
+    
+    for result in state['cve_results']:
+        # Calculate basic relevance score
+        basic_score = calculate_relevance_score(result, state['original_query'])
+        
+        # Perform validation if available
+        if validator:
+            cve_dict = {
+                "cve_id": result.cve_id,
+                "description": result.description,
+                "affected_products": result.affected_products,
+                "score": result.score,
+                "severity": result.severity
+            }
+            
+            validation = validator.validate_cve_relevance(cve_dict, vulnerability_context)
+            
+            if not validation.is_relevant:
+                print(f"  ❌ {result.cve_id}: FILTERED OUT (confidence: {validation.confidence_score:.2f})")
+                if validation.warning_flags:
+                    for warning in validation.warning_flags[:2]:  # Show first 2 warnings
+                        print(f"     ⚠️  {warning}")
+                filtered_count += 1
+                continue
+            
+            # Combine basic score with validation confidence
+            result.confidence_score = (basic_score * 0.3) + (validation.confidence_score * 10.0 * 0.7)
+            
+            print(f"  ✅ {result.cve_id}: RELEVANT (validation: {validation.confidence_score:.2f}, final: {result.confidence_score:.1f})")
+            if validation.relevance_reasons:
+                for reason in validation.relevance_reasons[:2]:  # Show first 2 reasons
+                    print(f"     ✓ {reason}")
+        else:
+            # Fallback to basic scoring only
+            result.confidence_score = basic_score
+        
+        validated_results.append(result)
+    
+    # Sort by confidence score and CVSS score
+    validated_results.sort(key=lambda x: (x.confidence_score, x.score), reverse=True)
+    
+    print(f"\nValidation Summary:")
+    print(f"  Total CVEs found: {len(state['cve_results'])}")
+    print(f"  Validated as relevant: {len(validated_results)}")
+    print(f"  Filtered out: {filtered_count}")
+    
     return {
         **state,
-        "messages": state["messages"] + [AIMessage(content="Scored and ranked CVE results by relevance")]
+        "cve_results": validated_results,
+        "messages": state["messages"] + [
+            AIMessage(content=f"Validated {len(validated_results)}/{len(state['cve_results'])} CVEs as relevant")
+        ]
     }
 
 
@@ -674,17 +753,48 @@ def create_cve_agent():
     return app
 
 
-# --- Main Search Function ---
-def combined_cve_search(query: str, max_results: int = 10) -> List[CVEResult]:
-    """Enhanced CVE search using agent-based approach."""
-    print(f"======== Starting Agent-Based CVE Search ========")
+def combined_cve_search(
+    query: str, 
+    max_results: int = 10,
+    vulnerability_context: Dict[str, Any] = None
+) -> List[CVEResult]:
+    """
+    Enhanced CVE search using agent-based approach with validation.
+    
+    Args:
+        query: Search query (vulnerability title/description)
+        max_results: Maximum number of results to return
+        vulnerability_context: Additional context for validation
+            - Operating System: OS/platform info
+            - QID: Qualys QID
+            - Asset Name: Asset hostname
+            - etc.
+    
+    Returns:
+        List of validated, relevant CVE results
+    """
+    print(f"======== Starting Agent-Based CVE Search with Validation ========")
     print(f"Initial Query: '{query}'")
-    print(f"=================================================")
+    if vulnerability_context:
+        print(f"Context: OS={vulnerability_context.get('Operating System', 'N/A')}, QID={vulnerability_context.get('QID', 'N/A')}")
+    print(f"=================================================================")
+    
     try:
         agent = create_cve_agent()
+        
+        # Prepare vulnerability context
+        if not vulnerability_context:
+            vulnerability_context = {}
+        
         initial_state = {
             "messages": [HumanMessage(content=f"Search for CVEs related to: {query}")],
             "original_query": query,
+            "os_context": vulnerability_context.get("Operating System", "Unknown"),
+            "qid": vulnerability_context.get("QID", ""),
+            "asset_info": {
+                k: str(v) for k, v in vulnerability_context.items() 
+                if k not in ["Operating System", "QID"]
+            },
             "enhanced_queries": [],
             "search_results": [],
             "cve_results": [],
@@ -701,11 +811,13 @@ def combined_cve_search(query: str, max_results: int = 10) -> List[CVEResult]:
         
         if cve_results:
             print(f"\n======== Agent Search Complete ========")
-            print(f"Agent found {len(cve_results)} relevant CVE(s).")
+            print(f"Found {len(cve_results)} validated and relevant CVE(s).")
+            print(f"========================================\n")
             return cve_results[:max_results]
         else:
             print(f"\n======== Agent Search Complete ========")
-            print(f"Agent found no relevant CVEs for query: '{query}'")
+            print(f"No relevant CVEs found for query: '{query}'")
+            print(f"========================================\n")
             return []
             
     except Exception as e:
