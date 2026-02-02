@@ -1,13 +1,15 @@
 import asyncio
 import time
 import json
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 from dataclasses import dataclass
 from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.output_parsers import PydanticOutputParser
-from langchain_core.messages import HumanMessage, SystemMessage
+from config.api_key_manager import generate_content_with_fallback
 
 # Pydantic models for output parsing
 class RemediationOutput(BaseModel):
@@ -37,116 +39,14 @@ class RemediationResult:
     rollback_plan: List[str]
 
 class ImprovedRemediationAgent:
-    """Improved agent with better rate limiting and fallback strategies"""
+    """Improved agent with API key rotation and fallback strategies"""
     
     def __init__(self):
-        # Use a paid model or switch to Gemini Pro if available
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",  # Try Pro version - better limits
-            temperature=0.3,
-            max_tokens=1000,
-            timeout=60,
-            max_retries=1  # Minimal retries to avoid quota exhaustion
-        )
-        
-        # Initialize output parsers
-        self.remediation_parser = PydanticOutputParser(pydantic_object=RemediationOutput)
-        self.risk_parser = PydanticOutputParser(pydantic_object=RiskAssessmentOutput)
-        
-        # Much more conservative rate limiting for free tier
-        self.daily_request_count = 0
-        self.daily_limit = 45  # Leave buffer below 50
-        self.last_reset_date = datetime.now().date()
-        self.min_request_interval = 30  # 30 seconds between requests
-        self.last_request_time = 0
-        
         # Enhanced caching to minimize API calls
         self.remediation_cache = {}
         self.template_cache = {}
         
-        # Circuit breaker
-        self.consecutive_failures = 0
-        self.max_failures = 2
-        self.circuit_breaker_until = None
-        
-    def _reset_daily_counter_if_needed(self):
-        """Reset daily counter at midnight"""
-        current_date = datetime.now().date()
-        if current_date > self.last_reset_date:
-            self.daily_request_count = 0
-            self.last_reset_date = current_date
-            self.consecutive_failures = 0
-            self.circuit_breaker_until = None
-            print(f"Daily API counter reset for {current_date}")
-    
-    def _can_make_api_call(self) -> bool:
-        """Check if we can make an API call"""
-        self._reset_daily_counter_if_needed()
-        
-        # Check daily limit
-        if self.daily_request_count >= self.daily_limit:
-            print(f"Daily API limit reached ({self.daily_request_count}/{self.daily_limit})")
-            return False
-        
-        # Check circuit breaker
-        if self.circuit_breaker_until and datetime.now() < self.circuit_breaker_until:
-            print(f"Circuit breaker active until {self.circuit_breaker_until}")
-            return False
-        
-        # Check rate limiting interval
-        time_since_last = time.time() - self.last_request_time
-        if time_since_last < self.min_request_interval:
-            print(f"Rate limit: need to wait {self.min_request_interval - time_since_last:.1f} more seconds")
-            return False
-        
-        return True
-    
-    def _record_api_success(self):
-        """Record successful API call"""
-        self.daily_request_count += 1
-        self.last_request_time = time.time()
-        self.consecutive_failures = 0
-        print(f"API call successful. Daily count: {self.daily_request_count}/{self.daily_limit}")
-    
-    def _record_api_failure(self):
-        """Record failed API call"""
-        self.consecutive_failures += 1
-        if self.consecutive_failures >= self.max_failures:
-            self.circuit_breaker_until = datetime.now() + timedelta(hours=1)
-            print(f"Circuit breaker activated for 1 hour due to {self.consecutive_failures} failures")
-    
-    def _wait_for_rate_limit(self):
-        """Wait for rate limit if needed"""
-        time_since_last = time.time() - self.last_request_time
-        if time_since_last < self.min_request_interval:
-            wait_time = self.min_request_interval - time_since_last
-            print(f"Waiting {wait_time:.1f} seconds for rate limit...")
-            time.sleep(wait_time)
-    
-    async def _safe_llm_call_sync(self, messages: List) -> str:
-        """Synchronous LLM call with proper error handling"""
-        
-        if not self._can_make_api_call():
-            raise Exception("API call not allowed due to rate limits or circuit breaker")
-        
-        self._wait_for_rate_limit()
-        
-        try:
-            # Make synchronous call to avoid event loop issues
-            response = self.llm.invoke(messages)
-            self._record_api_success()
-            return response.content
-            
-        except Exception as e:
-            self._record_api_failure()
-            error_str = str(e).lower()
-            
-            if any(keyword in error_str for keyword in ['429', 'quota', 'rate', 'limit', 'resourceexhausted']):
-                print(f"Rate limit hit: {e}")
-                # Set circuit breaker for longer time on rate limits
-                self.circuit_breaker_until = datetime.now() + timedelta(hours=2)
-            
-            raise e
+
     
     def _generate_category_specific_template(self, vuln_data: Dict, cve_info: Dict) -> RemediationResult:
         """Generate category-specific template without API calls"""
@@ -320,8 +220,8 @@ class ImprovedRemediationAgent:
         # First, try to use our smart template system
         template_result = self._generate_category_specific_template(vulnerability_data, cve_info)
         
-        # Only use LLM if we're confident we can make the call and it's worth it
-        if self._can_make_api_call() and self._should_use_llm(vulnerability_data, cve_info):
+        # Only use LLM if it's a critical vulnerability
+        if self._should_use_llm(vulnerability_data, cve_info):
             try:
                 print("Attempting LLM enhancement...")
                 enhanced_result = await self._enhance_with_llm(template_result, vulnerability_data, cve_info)
@@ -346,86 +246,57 @@ class ImprovedRemediationAgent:
         cve_score = float(cve_info.get('score', 0))
         
         # Use LLM for critical cases only
-        if severity == 'Critical' or is_pci or cve_score >= 8.0:
-            return True
-        
-        # Check if we have enough daily quota for non-critical cases
-        remaining_quota = self.daily_limit - self.daily_request_count
-        if remaining_quota > 10:  # Only if we have plenty of quota left
-            return True
-        
-        return False
+        return severity == 'Critical' or is_pci or cve_score >= 8.0
     
     async def _enhance_with_llm(self, template_result: RemediationResult, 
                                vuln_data: Dict, cve_info: Dict) -> RemediationResult:
-        """Enhance template with LLM-generated insights using output parser"""
+        """Enhance template with LLM-generated insights using API key rotation"""
         
-        # Create structured prompt with parser instructions
         context = f"""
-        Vulnerability Details:
-        - Title: {vuln_data.get('Title', 'Unknown')}
-        - CVE ID: {cve_info.get('cve_id', 'Unknown')}
-        - Severity: {cve_info.get('severity', 'Unknown')} (Score: {cve_info.get('score', 'N/A')})
-        - PCI Impact: {vuln_data.get('PCI Vuln', 'no')}
-        - Asset: {vuln_data.get('DNS', vuln_data.get('IP', 'Unknown'))}
-        - Current Assessment: {template_result.remediation_guide}
-        
-        Enhance this security remediation with specific, actionable guidance.
-        """
-        
-        # Get format instructions from parser
-        format_instructions = self.remediation_parser.get_format_instructions()
-        
-        prompt = f"""
-        {context}
-        
-        Provide enhanced remediation guidance for this vulnerability.
-        Focus on actionable, specific technical steps and business context.
-        
-        {format_instructions}
-        """
+Vulnerability Details:
+- Title: {vuln_data.get('Title', 'Unknown')}
+- CVE ID: {cve_info.get('cve_id', 'Unknown')}
+- Severity: {cve_info.get('severity', 'Unknown')} (Score: {cve_info.get('score', 'N/A')})
+- PCI Impact: {vuln_data.get('PCI Vuln', 'no')}
+- Asset: {vuln_data.get('DNS', vuln_data.get('IP', 'Unknown'))}
+- Current Assessment: {template_result.remediation_guide}
+
+Enhance this security remediation with specific, actionable guidance.
+Provide enhanced remediation guidance for this vulnerability.
+Focus on actionable, specific technical steps and business context.
+
+Return a JSON object with these fields:
+- remediation_guide: Enhanced remediation guidance
+- immediate_actions: List of 3 immediate actions
+- detailed_steps: List of detailed remediation steps
+"""
         
         try:
-            response = await self._safe_llm_call_sync([
-                SystemMessage(content="You are a cybersecurity expert. Provide specific, actionable remediation guidance."),
-                HumanMessage(content=prompt)
-            ])
+            response = generate_content_with_fallback(
+                context,
+                generation_config={
+                    'temperature': 0.3,
+                    'max_output_tokens': 1000
+                }
+            )
             
-            # Parse response using output parser
-            parsed_output = self.remediation_parser.parse(response)
-            
-            # Enhance the template with parsed output
-            template_result.remediation_guide = parsed_output.remediation_guide
-            template_result.immediate_actions = parsed_output.immediate_actions
-            template_result.detailed_steps = parsed_output.detailed_steps
+            # Try to parse JSON response
+            try:
+                import json
+                parsed_data = json.loads(response)
+                template_result.remediation_guide = parsed_data.get('remediation_guide', template_result.remediation_guide)
+                template_result.immediate_actions = parsed_data.get('immediate_actions', template_result.immediate_actions)
+                template_result.detailed_steps = parsed_data.get('detailed_steps', template_result.detailed_steps)
+            except:
+                # If JSON parsing fails, use the response as remediation guide
+                template_result.remediation_guide = response[:500] + "..."
             
             return template_result
             
         except Exception as e:
-            print(f"LLM enhancement with parser failed: {e}")
+            print(f"LLM enhancement failed: {e}")
             return template_result
-    
-    async def _safe_llm_call_sync(self, messages: List) -> str:
-        """Safe synchronous LLM call"""
-        
-        if not self._can_make_api_call():
-            raise Exception("API quota or rate limit prevents call")
-        
-        try:
-            response = self.llm.invoke(messages)
-            self._record_api_success()
-            return response.content
-            
-        except Exception as e:
-            self._record_api_failure()
-            
-            error_str = str(e).lower()
-            if any(keyword in error_str for keyword in ['429', 'quota', 'rate', 'limit']):
-                # For rate limits, set longer circuit breaker
-                self.circuit_breaker_until = datetime.now() + timedelta(hours=3)
-                print("Rate limit detected - circuit breaker set for 3 hours")
-            
-            raise e
+
 
 # Usage with error handling
 async def get_enhanced_remediation_data(result: Dict[str, Any], cve: Any = None) -> Dict[str, str]:

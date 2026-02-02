@@ -1,9 +1,14 @@
 import os
 import time
 import logging
+import warnings
 from typing import Optional, List, Dict, Any, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
+# Suppress all FutureWarnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import google.generativeai as genai
 from dotenv import load_dotenv
 
@@ -324,16 +329,34 @@ def create_gemini_model_with_fallback(model_name: str = "gemini-2.5-flash") -> A
 
 def generate_content_with_fallback(prompt: str, 
                                  model_name: str = "gemini-2.5-flash",
+                                 generation_config: dict = None,
                                  **kwargs) -> str:
     """Generate content with automatic API key fallback"""
     manager = get_api_key_manager()
     
     import os
     model_name = os.getenv("MODEL_NAME", "gemini-2.5-flash")
+    
     def _generate_content(api_key: str):
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
-        response = model.generate_content(prompt, **kwargs)
-        return response.text if response else ""
+        
+        # Handle generation_config parameter
+        if generation_config:
+            config = genai.types.GenerationConfig(**generation_config)
+            response = model.generate_content(prompt, generation_config=config, **kwargs)
+        else:
+            response = model.generate_content(prompt, **kwargs)
+            
+        # Safely extract text from response
+        if response and hasattr(response, 'text') and response.text:
+            return response.text
+        elif response and hasattr(response, 'candidates') and response.candidates:
+            # Try to get text from first candidate
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and candidate.content:
+                if hasattr(candidate.content, 'parts') and candidate.content.parts:
+                    return candidate.content.parts[0].text
+        return "No response generated"
     
     return manager.execute_with_fallback(_generate_content)
