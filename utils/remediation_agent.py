@@ -42,7 +42,7 @@ class ImprovedRemediationAgent:
     def __init__(self):
         # Use a paid model or switch to Gemini Pro if available
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",  # Try Pro version - better limits
+            model="gemini-2.5-flash",  # Try Pro version - better limits
             temperature=0.3,
             max_tokens=1000,
             timeout=60,

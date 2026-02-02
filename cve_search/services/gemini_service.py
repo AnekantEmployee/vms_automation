@@ -18,7 +18,7 @@ def analyze_query_with_gemini(query: str) -> str:
         
         # Create LLM with timeout configuration
         llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash", 
+            model="gemini-2.5-flash", 
             temperature=0.1, 
             max_tokens=150,
             timeout=TIMEOUT_CONFIG['gemini_api']

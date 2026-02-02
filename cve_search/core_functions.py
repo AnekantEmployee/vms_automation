@@ -152,7 +152,7 @@ def query_analyzer_node(state: CVESearchState) -> CVESearchState:
     print(f"\n--- Analyzing Query ---")
     print(f"Original query: {state['original_query']}")
     try:
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.1, max_tokens=150)
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1, max_tokens=150)
         prompt = f"""
         Analyze this security vulnerability query and extract the most important search terms for finding CVEs:
         Query: "{state['original_query']}"

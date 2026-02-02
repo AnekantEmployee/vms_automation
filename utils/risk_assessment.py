@@ -49,7 +49,7 @@ class RiskAgentState(TypedDict):
 class FastVulnerabilityRiskAgent:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",  # Faster model
+            model="gemini-2.5-flash",  # Faster model
             temperature=0.3,
             max_tokens=800  # Reduced for faster response
         )

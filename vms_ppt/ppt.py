@@ -48,12 +48,8 @@ def main(*slide_data):
             func(prs, data)
             total_slides_created += 1
 
-    # Save presentation
-    prs.save("Test Report 2.pptx")
-    
     runtime = time.time() - start_time
-    print(f"\n✅ Presentation created! 📊 {total_slides_created} slides ⏱️ {runtime:.4f}s")
-    print(f"💾 File: Test Report 2.pptx")
+    return prs, runtime, total_slides_created
 
 
 if __name__ == "__main__":
