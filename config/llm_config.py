@@ -24,8 +24,8 @@ load_dotenv()
 GEMINI_MODEL_DEFAULT = os.getenv("MODEL_NAME", "gemini-2.5-flash")
 GEMINI_LLM_MODEL = f"gemini/{GEMINI_MODEL_DEFAULT}"
 GEMINI_TEMPERATURE = 0.7
-GEMINI_TIMEOUT = 300  # Increased to 5 minutes
-GEMINI_MAX_RETRIES = 2  # Increased retries
+GEMINI_TIMEOUT = 300  # 5 minutes
+GEMINI_MAX_RETRIES = 3  # Increased retries for better reliability
 
 
 # API Keys - Load from environment
@@ -47,13 +47,21 @@ SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 # GLOBAL STATE
 # ============================================================================
 
-# Singleton instances
-_gemini_llm_cache = None
-_current_gemini_key_index = 0
+# Import API key manager
+_has_api_key_manager = False
+_api_key_manager = None
+
+try:
+    from config.api_key_manager import get_api_key_manager
+    _has_api_key_manager = True
+    _api_key_manager = get_api_key_manager()
+    logger.info("✅ Enhanced API key manager available")
+except ImportError:
+    logger.warning("⚠️ Enhanced API key manager not available, using basic rotation")
 
 
 # ============================================================================
-# GEMINI API FUNCTIONS
+# GEMINI API FUNCTIONS WITH ENHANCED KEY MANAGEMENT
 # ============================================================================
 
 
@@ -78,17 +86,18 @@ def get_gemini_llm(
         llm = get_gemini_llm(temperature=0.3)
     """
     if api_key is None:
-        try:
-            from config.api_key_manager import get_api_key_manager
-            manager = get_api_key_manager()
-            api_key = manager.get_next_available_key()
+        if _has_api_key_manager and _api_key_manager:
+            # Use API key manager for intelligent rotation
+            api_key = _api_key_manager.get_next_available_key()
             if not api_key:
                 raise ValueError("No working Gemini API keys available")
-        except ImportError:
-            # Fallback to basic rotation
+            logger.info(f"Using API key from manager (key index: {_api_key_manager.current_key_index + 1})")
+        else:
+            # Fallback to basic approach
             if not GEMINI_API_KEYS:
                 raise ValueError("No Gemini API keys available")
-            api_key = GEMINI_API_KEYS[_current_gemini_key_index]
+            api_key = GEMINI_API_KEYS[0]
+            logger.info("Using first available API key (no manager)")
 
     temp = temperature if temperature is not None else GEMINI_TEMPERATURE
     llm_model = model if model is not None else GEMINI_LLM_MODEL
@@ -102,39 +111,41 @@ def get_gemini_llm(
     )
 
 
-def rotate_gemini_key() -> str:
+def execute_llm_with_fallback(operation, max_attempts: int = None):
     """
-    Rotate to the next Gemini API key.
-
+    Execute LLM operation with automatic API key fallback.
+    
+    This is a wrapper around the API key manager's execute_with_fallback
+    for CrewAI/LangGraph operations.
+    
+    Args:
+        operation: Function that takes an API key and returns a result
+        max_attempts: Maximum number of API keys to try (default: all keys)
+    
     Returns:
-        The new API key being used
-
-    Raises:
-        ValueError: If fewer than 2 keys are available for rotation
-
+        Result from the operation
+    
     Example:
-        new_key = rotate_gemini_key()
-        print(f"Now using key {_current_gemini_key_index + 1}")
+        def my_llm_operation(api_key):
+            llm = get_gemini_llm(api_key=api_key)
+            return llm.generate("Hello")
+        
+        result = execute_llm_with_fallback(my_llm_operation)
     """
-    global _current_gemini_key_index
-
-    if len(GEMINI_API_KEYS) < 2:
-        raise ValueError("Cannot rotate with fewer than 2 API keys")
-
-    old_index = _current_gemini_key_index
-    _current_gemini_key_index = (_current_gemini_key_index + 1) % len(GEMINI_API_KEYS)
-    new_key = GEMINI_API_KEYS[_current_gemini_key_index]
-
-    logger.info(
-        f"🔄 Rotated Gemini key from {old_index + 1} to {_current_gemini_key_index + 1}/{len(GEMINI_API_KEYS)}"
-    )
-
-    return new_key
+    if _has_api_key_manager and _api_key_manager:
+        return _api_key_manager.execute_with_fallback(operation, max_attempts)
+    else:
+        # Fallback: just try with first key
+        if not GEMINI_API_KEYS:
+            raise ValueError("No Gemini API keys available")
+        return operation(GEMINI_API_KEYS[0])
 
 
 def get_current_gemini_key_index() -> int:
     """Get the current Gemini API key index."""
-    return _current_gemini_key_index
+    if _has_api_key_manager and _api_key_manager:
+        return _api_key_manager.current_key_index
+    return 0
 
 
 def get_gemini_keys_count() -> int:
@@ -165,7 +176,7 @@ def initialize_genai_model(
     This is useful for direct google.generativeai API calls instead of using CrewAI LLM.
 
     Args:
-        api_key: Optional API key to use. If None, uses current rotated key.
+        api_key: Optional API key to use. If None, uses API key manager.
         model_name: Optional model name. If None, uses default (gemini-2.5-flash).
 
     Returns:
@@ -179,9 +190,12 @@ def initialize_genai_model(
     import google.generativeai as genai
 
     if api_key is None:
-        if not GEMINI_API_KEYS:
+        if _has_api_key_manager and _api_key_manager:
+            api_key = _api_key_manager.get_next_available_key()
+        elif GEMINI_API_KEYS:
+            api_key = GEMINI_API_KEYS[0]
+        else:
             raise ValueError("No Gemini API keys available")
-        api_key = GEMINI_API_KEYS[_current_gemini_key_index]
 
     genai.configure(api_key=api_key)
     return genai.GenerativeModel(model_name)
@@ -204,7 +218,7 @@ def generate_with_gemini(
 
     Args:
         prompt: The prompt to send to Gemini
-        api_key: Optional API key. If None, uses current rotated key.
+        api_key: Optional API key. If None, uses API key manager.
         model_name: Model to use (default: gemini-2.5-flash)
         temperature: Temperature setting (default: 0.1)
         max_output_tokens: Max tokens in response (optional)
@@ -222,9 +236,12 @@ def generate_with_gemini(
     import google.generativeai as genai
 
     if api_key is None:
-        if not GEMINI_API_KEYS:
+        if _has_api_key_manager and _api_key_manager:
+            api_key = _api_key_manager.get_next_available_key()
+        elif GEMINI_API_KEYS:
+            api_key = GEMINI_API_KEYS[0]
+        else:
             raise ValueError("No Gemini API keys available")
-        api_key = GEMINI_API_KEYS[_current_gemini_key_index]
 
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(model_name)
@@ -294,11 +311,16 @@ def get_llm_status() -> Dict[str, Any]:
         status = get_llm_status()
         print(f"Gemini keys available: {status['gemini_keys_available']}")
     """
+    current_index = 0
+    if _has_api_key_manager and _api_key_manager:
+        current_index = _api_key_manager.current_key_index
+    
     return {
         "gemini_keys_available": len(GEMINI_API_KEYS),
-        "gemini_current_key_index": _current_gemini_key_index,
+        "gemini_current_key_index": current_index,
         "gemini_model": GEMINI_LLM_MODEL,
         "serper_available": bool(SERPER_API_KEY),
+        "has_api_key_manager": _has_api_key_manager,
     }
 
 
@@ -312,7 +334,15 @@ def print_llm_status():
     print(f"Gemini Current Key Index: {status['gemini_current_key_index'] + 1}")
     print(f"Gemini Model: {status['gemini_model']}")
     print(f"Serper Available: {status['serper_available']}")
+    print(f"API Key Manager: {'✅ Active' if status['has_api_key_manager'] else '❌ Not Available'}")
     print("=" * 60 + "\n")
+
+
+def get_api_key_manager_status() -> Dict[str, Any]:
+    """Get detailed status from API key manager if available"""
+    if _has_api_key_manager and _api_key_manager:
+        return _api_key_manager.get_status_report()
+    return {"error": "API key manager not available"}
 
 
 # ============================================================================
@@ -321,13 +351,6 @@ def print_llm_status():
 
 # Print status on module load (optional - comment out if too verbose)
 logger.info(
-    f"LLM Config loaded: {len(GEMINI_API_KEYS)} Gemini keys"
+    f"LLM Config loaded: {len(GEMINI_API_KEYS)} Gemini keys, "
+    f"API Key Manager: {'Active' if _has_api_key_manager else 'Not Available'}"
 )
-
-# Import API key manager for enhanced fallback
-try:
-    from config.api_key_manager import get_api_key_manager
-
-    logger.info("✅ Enhanced API key manager available")
-except ImportError:
-    logger.warning("⚠️ Enhanced API key manager not available")
