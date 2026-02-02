@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 try:
-    from cve_search.main import combined_cve_search
+    from cve_search.core_functions import combined_cve_search
     
     print("Testing the CVE search with the fix...")
     

@@ -15,12 +15,10 @@ Key Features:
 __version__ = "1.0.0"
 __author__ = "CVE Search Team"
 
-from .main import combined_cve_search
 from .models.data_models import CVEResult
 from .config.settings import CVESearchConfig
 
 __all__ = [
-    "combined_cve_search",
     "CVEResult", 
     "CVESearchConfig"
 ]

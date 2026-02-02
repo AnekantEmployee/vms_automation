@@ -2,13 +2,15 @@ import time
 import asyncio
 import pandas as pd
 import streamlit as st
-from typing import Dict, Any, Tuple
 from datetime import datetime
+from typing import Dict, Any, Tuple
 from utils.export_excel import export_results_to_excel
 from cve_search.core_functions import combined_cve_search
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.remediation_agent import get_enhanced_remediation_data
 from utils.risk_assessment import get_vulnerability_risk_assessment
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="langchain_google_genai")
 
 
 # Page configuration

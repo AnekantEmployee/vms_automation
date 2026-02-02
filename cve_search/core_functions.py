@@ -1,23 +1,19 @@
 import re
+import os
 import json
-import sys
-import time
 import requests
 import urllib.parse
-import concurrent.futures
 from threading import Lock
-from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, TypedDict, Annotated
-import os
-from dotenv import load_dotenv
 
 # LangGraph and LangChain imports
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.tools import tool
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.graph.message import add_messages
+from langgraph.graph import StateGraph, START, END
+from langchain_core.messages import HumanMessage, AIMessage
+from config.llm_config import generate_with_gemini
 
 # Optional TavilySearch import
 try:
@@ -27,12 +23,9 @@ try:
 except ImportError:
     TAVILY_AVAILABLE = False
     print("TavilySearch not available - continuing without it")
-    
-# Add the project root to path so we can import cve_validator
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
-    from cve_validator import CVEValidator
+    from cve_search.services.cve_validator import CVEValidator
     CVE_VALIDATION_ENABLED = True
     print("✅ CVE Validation enabled")
 except ImportError:
@@ -177,7 +170,6 @@ def query_analyzer_node(state: CVESearchState) -> CVESearchState:
     print(f"\n--- Analyzing Query ---")
     print(f"Original query: {state['original_query']}")
     try:
-        llm = ChatGoogleGenerativeAI(model=os.getenv("MODEL_NAME", "gemini-2.5-flash"), temperature=0.1, max_tokens=150)
         prompt = f"""
         Analyze this security vulnerability query and extract the most important search terms for finding CVEs:
         Query: "{state['original_query']}"
@@ -188,8 +180,8 @@ def query_analyzer_node(state: CVESearchState) -> CVESearchState:
         Return only the key search terms, maximum 6 words, separated by spaces.
         Be specific and use terms commonly found in CVE descriptions.
         Search terms:"""
-        response = llm.invoke([HumanMessage(content=prompt)])
-        enhanced_query = response.content.strip().lower()
+        response = generate_with_gemini(prompt, temperature=0.1)
+        enhanced_query = response.strip().lower()
         if not enhanced_query or len(enhanced_query) < 5:
             enhanced_query = extract_cve_keywords_func(state['original_query'])
         print(f"LLM Enhanced query: {enhanced_query}")

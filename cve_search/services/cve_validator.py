@@ -1,7 +1,8 @@
 import re
 import requests
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from typing import List, Dict, Any, Optional
+from config.llm_config import generate_with_gemini
 
 
 @dataclass
@@ -16,7 +17,8 @@ class ValidationResult:
 class CVEValidator:
     """Validates CVE relevance to vulnerability context"""
     
-    def __init__(self):
+    def __init__(self, use_llm: bool = True):
+        self.use_llm = use_llm
         # Generic vulnerability indicators that shouldn't map to specific product CVEs
         self.generic_indicators = [
             "deprecated",
@@ -109,6 +111,16 @@ class CVEValidator:
         if qid_validation["matches"]:
             relevance_reasons.extend(qid_validation["matches"])
             confidence_score += 0.2
+        
+        # Check 6: LLM-based validation (if enabled)
+        if self.use_llm:
+            llm_validation = self._llm_validate_relevance(vulnerability_context, cve_data)
+            if llm_validation["relevant"]:
+                relevance_reasons.append(llm_validation["reason"])
+                confidence_score += 0.3
+            elif llm_validation["irrelevant"]:
+                warning_flags.append(llm_validation["reason"])
+                confidence_score -= 0.2
         
         # Normalize confidence score
         confidence_score = max(0.0, min(1.0, confidence_score))
@@ -332,12 +344,53 @@ class CVEValidator:
                 )
         
         return {"warnings": warnings, "matches": matches}
+    
+    def _llm_validate_relevance(
+        self,
+        vulnerability_context: Dict[str, Any],
+        cve_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Use LLM to validate CVE relevance"""
+        try:
+            prompt = f"""
+Analyze if this CVE is relevant to the vulnerability:
+
+Vulnerability:
+- Title: {vulnerability_context.get('Title', 'N/A')}
+- QID: {vulnerability_context.get('QID', 'N/A')}
+- OS: {vulnerability_context.get('Operating System', 'N/A')}
+
+CVE:
+- ID: {cve_data.get('cve_id', 'N/A')}
+- Description: {cve_data.get('description', 'N/A')[:500]}...
+
+Respond with ONLY:
+- RELEVANT: [brief reason] OR
+- IRRELEVANT: [brief reason] OR
+- UNCERTAIN: [brief reason]
+"""
+            
+            response = generate_with_gemini(prompt, temperature=0.1)
+            
+            if "RELEVANT:" in response:
+                reason = response.split("RELEVANT:")[1].strip()
+                return {"relevant": True, "irrelevant": False, "reason": f"LLM: {reason}"}
+            elif "IRRELEVANT:" in response:
+                reason = response.split("IRRELEVANT:")[1].strip()
+                return {"relevant": False, "irrelevant": True, "reason": f"LLM: {reason}"}
+            
+            return {"relevant": False, "irrelevant": False, "reason": "LLM: Uncertain"}
+            
+        except Exception as e:
+            print(f"LLM validation error")
+            return {"relevant": False, "irrelevant": False, "reason": "LLM validation failed"}
 
 
 def get_relevant_cves_from_nist(
     keywords: str,
     os_context: Optional[str] = None,
-    max_results: int = 5
+    max_results: int = 5,
+    use_llm_validation: bool = False
 ) -> List[Dict[str, Any]]:
     """
     Search NIST NVD for relevant CVEs with better context awareness
@@ -415,6 +468,22 @@ def get_relevant_cves_from_nist(
                     "published_date": cve_item.get("published", ""),
                     "modified_date": cve_item.get("lastModified", "")
                 })
+        
+        # Optional LLM filtering
+        if use_llm_validation and results:
+            try:
+                validator = CVEValidator(use_llm=True)
+                filtered_results = []
+                for result in results:
+                    validation = validator.validate_cve_relevance(
+                        result, 
+                        {"Title": keywords, "Operating System": os_context or "unknown"}
+                    )
+                    if validation.is_relevant:
+                        filtered_results.append(result)
+                return filtered_results
+            except Exception as e:
+                print(f"LLM filtering error: {e}")
         
         return results
         
