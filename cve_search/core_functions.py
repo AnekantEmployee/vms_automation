@@ -90,8 +90,7 @@ class CVESearchState(TypedDict):
     external_search_done: bool
 
 
-@tool
-def extract_cve_keywords(query: str) -> str:
+def extract_cve_keywords_func(query: str) -> str:
     """Extract and enhance keywords for CVE searching from a vulnerability description."""
     keyword_mappings = {
         'ssl/tls': ['certificate', 'encryption', 'handshake', 'cipher'],
@@ -128,7 +127,18 @@ def extract_cve_keywords(query: str) -> str:
 
 
 @tool
-def search_external_cve_info(query: str) -> str:
+def extract_cve_keywords(query: str) -> str:
+    """Extract and enhance keywords for CVE searching from a vulnerability description."""
+    return extract_cve_keywords_func(query)
+
+
+@tool
+def search_external_cve_info_tool(query: str) -> str:
+    """Search for additional CVE information using external search if available."""
+    return search_external_cve_info_func(query)
+
+
+def search_external_cve_info_func(query: str) -> str:
     """Search for additional CVE information using external search if available."""
     if not TAVILY_AVAILABLE:
         print("External search not available")
@@ -166,11 +176,11 @@ def query_analyzer_node(state: CVESearchState) -> CVESearchState:
         response = llm.invoke([HumanMessage(content=prompt)])
         enhanced_query = response.content.strip().lower()
         if not enhanced_query or len(enhanced_query) < 5:
-            enhanced_query = extract_cve_keywords(state['original_query'])
+            enhanced_query = extract_cve_keywords_func(state['original_query'])
         print(f"LLM Enhanced query: {enhanced_query}")
         enhanced_queries = list(dict.fromkeys([
             enhanced_query,
-            extract_cve_keywords(state['original_query']),
+            extract_cve_keywords_func(state['original_query']),
             state['original_query'].lower()
         ]))
         return {
@@ -180,7 +190,7 @@ def query_analyzer_node(state: CVESearchState) -> CVESearchState:
         }
     except Exception as e:
         print(f"Query analysis failed: {e}")
-        enhanced_query = extract_cve_keywords(state['original_query'])
+        enhanced_query = extract_cve_keywords_func(state['original_query'])
         return {
             **state,
             "enhanced_queries": [enhanced_query, state['original_query'].lower()],
@@ -229,7 +239,7 @@ def external_search_node(state: CVESearchState) -> CVESearchState:
         print("External search already completed.")
         return state
     try:
-        external_results = search_external_cve_info(state['original_query'])
+        external_results = search_external_cve_info_func(state['original_query'])
         return {
             **state,
             "search_results": [{"external_search": external_results}],

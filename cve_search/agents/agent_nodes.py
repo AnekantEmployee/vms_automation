@@ -7,7 +7,7 @@ from langchain_core.messages import AIMessage
 from ..models.data_models import CVESearchState
 from ..services.gemini_service import analyze_query_with_gemini
 from ..services.external_search import search_external_cve_info
-from ..tools.search_tools import extract_cve_keywords, search_cve_databases
+from ..tools.search_tools import extract_cve_keywords_func, search_cve_databases
 from ..utils.helpers import calculate_relevance_score
 
 
@@ -20,13 +20,13 @@ def query_analyzer_node(state: CVESearchState) -> CVESearchState:
         enhanced_query = analyze_query_with_gemini(state['original_query'])
         
         if not enhanced_query or len(enhanced_query) < 5:
-            enhanced_query = extract_cve_keywords(state['original_query'])
+            enhanced_query = extract_cve_keywords_func(state['original_query'])
         
         print(f"LLM Enhanced query: {enhanced_query}")
         
         enhanced_queries = list(dict.fromkeys([
             enhanced_query,
-            extract_cve_keywords(state['original_query']),
+            extract_cve_keywords_func(state['original_query']),
             state['original_query'].lower()
         ]))
         
@@ -38,7 +38,7 @@ def query_analyzer_node(state: CVESearchState) -> CVESearchState:
         
     except Exception as e:
         print(f"Query analysis failed: {e}")
-        enhanced_query = extract_cve_keywords(state['original_query'])
+        enhanced_query = extract_cve_keywords_func(state['original_query'])
         return {
             **state,
             "enhanced_queries": [enhanced_query, state['original_query'].lower()],

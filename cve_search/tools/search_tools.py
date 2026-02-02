@@ -10,8 +10,7 @@ from ..services.cve_org_service import search_cve_org
 from ..services.osv_service import search_osv_database
 
 
-@tool
-def extract_cve_keywords(query: str) -> str:
+def extract_cve_keywords_func(query: str) -> str:
     """Extract and enhance keywords for CVE searching from a vulnerability description."""
     keyword_mappings = {
         'ssl/tls': ['certificate', 'encryption', 'handshake', 'cipher'],
@@ -54,6 +53,12 @@ def extract_cve_keywords(query: str) -> str:
     result = ' '.join(unique_keywords[:6])
     print(f"Extracted keywords from '{query}': {result}")
     return result
+
+
+@tool
+def extract_cve_keywords(query: str) -> str:
+    """Extract and enhance keywords for CVE searching from a vulnerability description."""
+    return extract_cve_keywords_func(query)
 
 
 def search_cve_databases(query: str) -> List[CVEResult]:

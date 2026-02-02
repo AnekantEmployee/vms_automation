@@ -1,13 +1,13 @@
 import asyncio
 import time
 import json
+from dataclasses import dataclass
+from pydantic import BaseModel, Field
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.schema import HumanMessage, SystemMessage
-from langchain.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.messages import HumanMessage, SystemMessage
 
 # Pydantic models for output parsing
 class RemediationOutput(BaseModel):
