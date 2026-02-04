@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from improved_cve_search import ImprovedCVESearcher, format_results_for_display
+from enhanced_cve_search.improved_cve_search import EnhancedCVESearchSystem, format_results_for_display
 
 def main():
     """Test the improved system"""
@@ -27,7 +27,7 @@ def main():
     print()
     
     # Initialize searcher
-    searcher = ImprovedCVESearcher(tavily_api_key=tavily_api_key)
+    searcher = EnhancedCVESearchSystem(tavily_api_key=tavily_api_key)
     
     # Test cases
     test_cases = [

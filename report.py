@@ -136,13 +136,32 @@ async def process_single_vulnerability_async(
             "Category": str(row.get("Category", "")),
             "Type": vuln_type
         }
+        from enhanced_cve_search.improved_cve_search import EnhancedCVESearchSystem
+        
+        import os
+        from dotenv import load_dotenv
+        load_dotenv()
+        tavily_key = os.getenv("TAVILY_API_KEY")
+        if not tavily_key:
+            print("❌ TAVILY_API_KEY not found")
+            exit(1)
+        
+        searcher = EnhancedCVESearchSystem(tavily_api_key=tavily_key)
+        
+        cve_results = searcher.search_vulnerability(
+            vulnerability_description=title,
+            context={"Operating System": str(row.get("OS", "Unknown"))},
+            max_cves=max_results_per_vuln
+        )
+        cve_results = getattr(cve_results, 'cves', [])  # Safe attribute access with fallback
+
         
         # Call CVE search with context for validation
-        cve_results = combined_cve_search(
-            title, 
-            max_results_per_vuln,
-            vulnerability_context=vulnerability_context  # Pass context
-        )
+        # cve_results = combined_cve_search(
+        #     title, s
+        #     max_results_per_vuln,
+        #     vulnerability_context=vulnerability_context  # Pass context
+        # )
         # ========== MODIFICATION END ==========
         
         original_data = {col: str(row.get(col, "")) for col in row.index}
