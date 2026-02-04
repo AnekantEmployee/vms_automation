@@ -75,7 +75,7 @@ class APIKeyManager:
                 genai.configure(api_key=test_key)
                 model = genai.GenerativeModel(model_name)
                 model.generate_content("test", generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=1, temperature=0
+                    max_output_tokens=1, temperature=0.0
                 ))
                 logger.info(f"Starting with working key 9")
                 return 8  # Start with key 9
@@ -95,7 +95,7 @@ class APIKeyManager:
                 genai.configure(api_key=key)
                 model = genai.GenerativeModel(model_name)
                 model.generate_content("test", generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=1, temperature=0
+                    max_output_tokens=1, temperature=0.0
                 ))
                 self._mark_key_success(key)
                 logger.info(f"Key {i+1}: Working")
@@ -329,7 +329,8 @@ def create_gemini_model_with_fallback(model_name: str = "gemini-2.5-flash") -> A
 
 def generate_content_with_fallback(prompt: str, 
                                  model_name: str = "gemini-2.5-flash",
-                                 generation_config: dict = None,
+                                 temperature: float = None,
+                                 max_output_tokens: int = None,
                                  **kwargs) -> str:
     """Generate content with automatic API key fallback"""
     manager = get_api_key_manager()
@@ -341,12 +342,19 @@ def generate_content_with_fallback(prompt: str,
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(model_name)
         
-        # Handle generation_config parameter
-        if generation_config:
-            config = genai.types.GenerationConfig(**generation_config)
-            response = model.generate_content(prompt, generation_config=config, **kwargs)
+        # Build generation config from parameters
+        config_params = {}
+        if temperature is not None:
+            config_params['temperature'] = temperature
+        if max_output_tokens is not None:
+            config_params['max_output_tokens'] = max_output_tokens
+        
+        # Generate content with config if parameters provided
+        if config_params:
+            config = genai.types.GenerationConfig(**config_params)
+            response = model.generate_content(prompt, generation_config=config)
         else:
-            response = model.generate_content(prompt, **kwargs)
+            response = model.generate_content(prompt)
             
         # Safely extract text from response
         if response and hasattr(response, 'text') and response.text:

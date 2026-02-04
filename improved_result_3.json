@@ -1,0 +1,91 @@
+{
+  "query": "Web Server Uses Plain-Text Form Based Authentication",
+  "context": {
+    "Operating System": "Windows Server 2019",
+    "Service": "IIS"
+  },
+  "timestamp": "2026-02-04T11:07:07.856873",
+  "cves": [
+    {
+      "cve_id": "CVE-2025-59287",
+      "description": "Deserialization of untrusted data in Windows Server Update Service allows an unauthorized attacker to execute code over a network.",
+      "severity": "CRITICAL",
+      "cvss_score": 9.8,
+      "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "published_date": "2025-10-14T17:16:11.670",
+      "modified_date": "2025-11-12T14:33:19.727",
+      "cwe_ids": [
+        "CWE-502"
+      ],
+      "cwe_details": [
+        {
+          "cwe_id": "CWE-502",
+          "name": ": Deserialization of Untrusted Data (4.19.1)",
+          "description": "| |  | | --- | | CWE Glossary Definition | |  |  CWE-502: Deserialization of Untrusted Data  |  | | --- | | Weakness ID: 502   Vulnerability Mapping: ALLOWED This CWE ID may be used to map to real-world vulnerabilities     Abstraction: Base Base - a weakness that is still mostly independent of a resource or technology, but with sufficient details to provide specific methods for detection and prevention. It is not a complete list of all CVEs that are related to this CWE entry.*  | Reference | Des",
+          "abstraction_level": "Unknown",
+          "likelihood": "Unknown",
+          "impact": "Unknown"
+        }
+      ],
+      "affected_products": [
+        "microsoft windows_server_2012",
+        "microsoft windows_server_2016",
+        "microsoft windows_server_2019",
+        "microsoft windows_server_2022",
+        "microsoft windows_server_2022_23h2",
+        "microsoft windows_server_2025"
+      ],
+      "references": [
+        "https://msrc.microsoft.com/update-guide/vulnerability/CVE-2025-59287",
+        "https://hawktrace.com/blog/CVE-2025-59287",
+        "https://www.bleepingcomputer.com/news/security/cisa-orders-feds-to-patch-windows-server-wsus-flaw-exploited-in-attacks/",
+        "https://www.vicarius.io/vsociety/posts/cve-2025-59287-detection-script-rce-vulnerability-in-windows-server-update-service",
+        "https://www.vicarius.io/vsociety/posts/cve-2025-59287-mitigation-script-rce-vulnerability-in-windows-server-update-service"
+      ],
+      "exploit_available": false,
+      "patch_available": false,
+      "relevance_score": 0.6749999999999999,
+      "relevance_reasoning": "LLM Analysis: LLM error: All 9 API key attempts failed. Last error: 429 You | Vulnerability type matches",
+      "source": "NIST NVD"
+    }
+  ],
+  "cwes": [],
+  "analysis": {
+    "vulnerability_type": "Unknown",
+    "severity_estimate": "Medium",
+    "affected_components": [],
+    "cwes": [],
+    "key_terms": [
+      "form",
+      "server",
+      "plain",
+      "based",
+      "text",
+      "authentication",
+      "uses"
+    ],
+    "search_focus": "General vulnerability search"
+  },
+  "search_strategy": [
+    {
+      "query": "Unknown form server",
+      "rationale": "Vulnerability type + key terms"
+    },
+    {
+      "query": "form server plain based",
+      "rationale": "Main keywords"
+    },
+    {
+      "query": "Unknown",
+      "rationale": "Vulnerability type"
+    },
+    {
+      "query": "Web Server Uses Plain-Text Form Based Authenticati",
+      "rationale": "Original description"
+    },
+    {
+      "query": "Windows Server 2019 form",
+      "rationale": "OS + main keyword"
+    }
+  ]
+}

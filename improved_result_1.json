@@ -1,0 +1,46 @@
+{
+  "query": "SSL Certificate - Signature Verification Failed Vulnerability",
+  "context": {
+    "Operating System": "Linux Ubuntu 20.04",
+    "Asset Type": "Web Server"
+  },
+  "timestamp": "2026-02-04T11:04:42.544465",
+  "cves": [],
+  "cwes": [],
+  "analysis": {
+    "vulnerability_type": "Unknown",
+    "severity_estimate": "Medium",
+    "affected_components": [],
+    "cwes": [],
+    "key_terms": [
+      "verification",
+      "vulnerability",
+      "signature",
+      "failed",
+      "certificate"
+    ],
+    "search_focus": "General vulnerability search"
+  },
+  "search_strategy": [
+    {
+      "query": "Unknown verification vulnerability",
+      "rationale": "Vulnerability type + key terms"
+    },
+    {
+      "query": "verification vulnerability signature failed",
+      "rationale": "Main keywords"
+    },
+    {
+      "query": "Unknown",
+      "rationale": "Vulnerability type"
+    },
+    {
+      "query": "SSL Certificate - Signature Verification Failed Vu",
+      "rationale": "Original description"
+    },
+    {
+      "query": "Linux Ubuntu 20.04 verification",
+      "rationale": "OS + main keyword"
+    }
+  ]
+}

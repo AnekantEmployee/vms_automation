@@ -1,0 +1,175 @@
+{
+  "query": "SHA1 deprecated setting for SSH",
+  "context": {
+    "Operating System": "Linux",
+    "Service": "OpenSSH"
+  },
+  "timestamp": "2026-02-04T11:06:14.660902",
+  "cves": [
+    {
+      "cve_id": "CVE-2001-1390",
+      "description": "Unknown vulnerability in binfmt_misc in the Linux kernel before 2.2.19, related to user pages.",
+      "severity": "UNKNOWN",
+      "cvss_score": 6.2,
+      "cvss_vector": "AV:L/AC:H/Au:N/C:C/I:C/A:C",
+      "published_date": "2001-04-17T04:00:00.000",
+      "modified_date": "2025-04-03T01:03:51.193",
+      "cwe_ids": [],
+      "cwe_details": [],
+      "affected_products": [
+        "linux linux_kernel"
+      ],
+      "references": [
+        "http://marc.info/?l=bugtraq&m=98575345009963&w=2",
+        "http://marc.info/?l=bugtraq&m=98637996127004&w=2",
+        "http://marc.info/?l=bugtraq&m=98653252326445&w=2",
+        "http://marc.info/?l=bugtraq&m=98684172109474&w=2",
+        "http://marc.info/?l=bugtraq&m=98759029811377&w=2"
+      ],
+      "exploit_available": false,
+      "patch_available": false,
+      "relevance_score": 0.595,
+      "relevance_reasoning": "LLM Analysis: LLM error: All 9 API key attempts failed. Last error: 429 You | Vulnerability type matches",
+      "source": "NIST NVD"
+    },
+    {
+      "cve_id": "CVE-2001-1395",
+      "description": "Unknown vulnerability in sockfilter for Linux kernel before 2.2.19 related to \"boundary cases,\" with unknown impact.",
+      "severity": "UNKNOWN",
+      "cvss_score": 3.6,
+      "cvss_vector": "AV:L/AC:L/Au:N/C:P/I:P/A:N",
+      "published_date": "2001-04-17T04:00:00.000",
+      "modified_date": "2025-04-03T01:03:51.193",
+      "cwe_ids": [],
+      "cwe_details": [],
+      "affected_products": [
+        "linux linux_kernel"
+      ],
+      "references": [
+        "http://marc.info/?l=bugtraq&m=98575345009963&w=2",
+        "http://marc.info/?l=bugtraq&m=98637996127004&w=2",
+        "http://marc.info/?l=bugtraq&m=98653252326445&w=2",
+        "http://marc.info/?l=bugtraq&m=98684172109474&w=2",
+        "http://marc.info/?l=bugtraq&m=98759029811377&w=2"
+      ],
+      "exploit_available": false,
+      "patch_available": false,
+      "relevance_score": 0.595,
+      "relevance_reasoning": "LLM Analysis: LLM error: All 9 API key attempts failed. Last error: 429 You | Vulnerability type matches",
+      "source": "NIST NVD"
+    },
+    {
+      "cve_id": "CVE-2001-1396",
+      "description": "Unknown vulnerabilities in strnlen_user for Linux kernel before 2.2.19, with unknown impact.",
+      "severity": "UNKNOWN",
+      "cvss_score": 3.6,
+      "cvss_vector": "AV:L/AC:L/Au:N/C:P/I:P/A:N",
+      "published_date": "2001-04-17T04:00:00.000",
+      "modified_date": "2025-04-03T01:03:51.193",
+      "cwe_ids": [],
+      "cwe_details": [],
+      "affected_products": [
+        "linux linux_kernel"
+      ],
+      "references": [
+        "http://marc.info/?l=bugtraq&m=98575345009963&w=2",
+        "http://marc.info/?l=bugtraq&m=98637996127004&w=2",
+        "http://marc.info/?l=bugtraq&m=98653252326445&w=2",
+        "http://marc.info/?l=bugtraq&m=98684172109474&w=2",
+        "http://marc.info/?l=bugtraq&m=98759029811377&w=2"
+      ],
+      "exploit_available": false,
+      "patch_available": false,
+      "relevance_score": 0.595,
+      "relevance_reasoning": "LLM Analysis: LLM parsing failed | Vulnerability type matches",
+      "source": "NIST NVD"
+    },
+    {
+      "cve_id": "CVE-2001-1400",
+      "description": "Unknown vulnerabilities in the UDP port allocation for Linux kernel before 2.2.19 could allow local users to cause a denial of service (deadlock).",
+      "severity": "UNKNOWN",
+      "cvss_score": 2.1,
+      "cvss_vector": "AV:L/AC:L/Au:N/C:N/I:N/A:P",
+      "published_date": "2001-04-17T04:00:00.000",
+      "modified_date": "2025-04-03T01:03:51.193",
+      "cwe_ids": [],
+      "cwe_details": [],
+      "affected_products": [
+        "linux linux_kernel"
+      ],
+      "references": [
+        "http://marc.info/?l=bugtraq&m=98575345009963&w=2",
+        "http://marc.info/?l=bugtraq&m=98637996127004&w=2",
+        "http://marc.info/?l=bugtraq&m=98653252326445&w=2",
+        "http://marc.info/?l=bugtraq&m=98684172109474&w=2",
+        "http://marc.info/?l=bugtraq&m=98759029811377&w=2"
+      ],
+      "exploit_available": false,
+      "patch_available": false,
+      "relevance_score": 0.595,
+      "relevance_reasoning": "LLM Analysis: LLM error: All 9 API key attempts failed. Last error: 429 You | Vulnerability type matches",
+      "source": "NIST NVD"
+    },
+    {
+      "cve_id": "CVE-2001-1393",
+      "description": "Unknown vulnerability in classifier code for Linux kernel before 2.2.19 could result in denial of service (hang).",
+      "severity": "UNKNOWN",
+      "cvss_score": 2.1,
+      "cvss_vector": "AV:L/AC:L/Au:N/C:N/I:N/A:P",
+      "published_date": "2001-04-17T04:00:00.000",
+      "modified_date": "2025-04-03T01:03:51.193",
+      "cwe_ids": [],
+      "cwe_details": [],
+      "affected_products": [
+        "linux linux_kernel"
+      ],
+      "references": [
+        "http://marc.info/?l=bugtraq&m=98575345009963&w=2",
+        "http://marc.info/?l=bugtraq&m=98637996127004&w=2",
+        "http://marc.info/?l=bugtraq&m=98653252326445&w=2",
+        "http://marc.info/?l=bugtraq&m=98684172109474&w=2",
+        "http://marc.info/?l=bugtraq&m=98759029811377&w=2"
+      ],
+      "exploit_available": false,
+      "patch_available": false,
+      "relevance_score": 0.595,
+      "relevance_reasoning": "LLM Analysis: LLM parsing failed | Vulnerability type matches",
+      "source": "NIST NVD"
+    }
+  ],
+  "cwes": [],
+  "analysis": {
+    "vulnerability_type": "Unknown",
+    "severity_estimate": "Medium",
+    "affected_components": [],
+    "cwes": [],
+    "key_terms": [
+      "deprecated",
+      "setting",
+      "sha1"
+    ],
+    "search_focus": "General vulnerability search"
+  },
+  "search_strategy": [
+    {
+      "query": "Unknown deprecated setting",
+      "rationale": "Vulnerability type + key terms"
+    },
+    {
+      "query": "deprecated setting sha1",
+      "rationale": "Main keywords"
+    },
+    {
+      "query": "Unknown",
+      "rationale": "Vulnerability type"
+    },
+    {
+      "query": "SHA1 deprecated setting for SSH",
+      "rationale": "Original description"
+    },
+    {
+      "query": "Linux deprecated",
+      "rationale": "OS + main keyword"
+    }
+  ]
+}
