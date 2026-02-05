@@ -11,6 +11,7 @@ pydantic
 python-dotenv
 python_pptx
 requests
-streamlit
+streamlit>=1.28.0,<2.0.0
+altair>=4.2.0,<6.0.0
 tavily_python
 google-generativeai
