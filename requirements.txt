@@ -6,7 +6,7 @@ langchain_tavily
 langgraph
 numpy
 pandas
-protobuf
+protobuf<=3.20.3
 pydantic
 python-dotenv
 python_pptx
