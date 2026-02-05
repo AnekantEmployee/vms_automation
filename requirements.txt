@@ -7,7 +7,7 @@ langgraph==1.0.7
 numpy==2.4.2
 pandas==3.0.0
 protobuf==6.33.5
-pydantic==2.12.5
+pydantic~=2.11.9
 python-dotenv==1.2.1
 python_pptx==1.0.2
 Requests==2.32.5
