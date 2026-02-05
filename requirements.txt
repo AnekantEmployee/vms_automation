@@ -13,3 +13,4 @@ python_pptx
 requests
 streamlit
 tavily_python
+google-generativeai
