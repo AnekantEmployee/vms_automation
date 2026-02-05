@@ -1,17 +1,16 @@
 import time
 import asyncio
+import warnings
 import pandas as pd
 import streamlit as st
 from datetime import datetime
 from typing import Dict, Any, Tuple
 from utils.export_excel import export_results_to_excel
-from cve_search.core_functions import combined_cve_search
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.remediation_agent import get_enhanced_remediation_data
 from utils.risk_assessment import get_vulnerability_risk_assessment
-import warnings
-warnings.filterwarnings("ignore", category=UserWarning, module="langchain_google_genai")
 
+warnings.filterwarnings("ignore", category=UserWarning, module="langchain_google_genai")
 
 # Page configuration
 st.set_page_config(
@@ -88,9 +87,9 @@ def read_uploaded_file(uploaded_file) -> pd.DataFrame:
     """Read uploaded file"""
     file_ext = uploaded_file.name.split(".")[-1].lower()
     if file_ext == "csv":
-        return pd.read_csv(uploaded_file)
+        return pd.read_csv(uploaded_file, header=None)  # ← Changed here
     elif file_ext in ["xlsx", "xls"]:
-        return pd.read_excel(uploaded_file)
+        return pd.read_excel(uploaded_file, header=None)  # ← Changed here
     else:
         raise ValueError(f"Unsupported file format: {file_ext}")
 
@@ -98,7 +97,9 @@ def read_uploaded_file(uploaded_file) -> pd.DataFrame:
 def find_header_row(df: pd.DataFrame) -> int:
     """Find row with 'Title' column"""
     for idx, row in df.iterrows():
+        print(f"Checking row index {idx} (Excel row {idx + 1}): {row.values}")
         if any("title" in str(cell).lower() for cell in row.values if pd.notna(cell)):
+            print(f"✅ Found 'Title' at index {idx} (Excel row {idx + 1})")
             return idx
     return -1
 
@@ -115,20 +116,15 @@ async def process_single_vulnerability_async(
     
     title = str(row.get(title_col, "")).strip()
     vuln_type = str(row.get(type_col, "")).strip() if type_col else "Unknown"
-    
     if not title or title == "nan":
         return None, "skipped_empty"
-    
-    # Skip if type column exists and doesn't contain "vuln" or "ig" (case-insensitive)
-    if type_col and not any(keyword in vuln_type.lower() for keyword in ["vuln", "ig"]):
-        return None, "skipped_type"
     
     try:
         # ========== MODIFICATION START ==========
         # Prepare vulnerability context for CVE validation
         vulnerability_context = {
             "Title": title,
-            "Operating System": str(row.get("OS", "Unknown")),
+            "Operating System": str(row.get("Operating System", "Unknown")),
             "QID": str(row.get("QID", "")),
             "Asset Name": str(row.get("DNS", "")),
             "Asset IP": str(row.get("IP", "")),
@@ -150,7 +146,7 @@ async def process_single_vulnerability_async(
         
         cve_results = searcher.search_vulnerability(
             vulnerability_description=title,
-            context={"Operating System": str(row.get("OS", "Unknown"))},
+            context={"Operating System": str(row.get("Operating System", "Unknown"))},
             max_cves=max_results_per_vuln
         )
         cve_results = getattr(cve_results, 'cves', [])  # Safe attribute access with fallback
@@ -371,17 +367,20 @@ def process_vulnerability_report(
 
     # Process headers
     df.columns = df.iloc[header_row].values
-    df = df.iloc[header_row + 1 :].reset_index(drop=True)
+    df = df.iloc[header_row + 1:].reset_index(drop=True)
     df.columns = [str(col).strip() for col in df.columns]
 
     # Find columns
     title_col = next((col for col in df.columns if "title" in str(col).lower()), None)
     type_col = next((col for col in df.columns if "type" in str(col).lower()), None)
-
+    
     if not title_col:
         ChatInterface.add_message("❌ 'Title' column not found", "error")
         return None
 
+    # Limit to first 5 rows
+    df = df.head(2)
+    
     ChatInterface.add_message(
         f"✅ Processing {len(df)} rows with {max_workers} parallel workers (including AI remediation)", "success"
     )
@@ -397,7 +396,6 @@ def process_vulnerability_report(
     }
 
     import streamlit as st
-    progress_placeholder = st.empty()
     progress_bar = st.progress(0)
     status_text = st.empty()
 
@@ -491,8 +489,6 @@ def process_vulnerability_report(
             "total_remediations_generated": total_remediations,
         },
     }
-
-
 
 def main():
     """Streamlined main application"""
@@ -683,7 +679,6 @@ def main():
     """,
         unsafe_allow_html=True,
     )
-
 
 if __name__ == "__main__":
     main()

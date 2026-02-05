@@ -39,6 +39,7 @@ GEMINI_API_KEYS = [
     os.getenv("GOOGLE_API_KEY_7"),
     os.getenv("GOOGLE_API_KEY_8"),
     os.getenv("GOOGLE_API_KEY_9"),
+    os.getenv("GOOGLE_API_KEY_10"),
 ]
 GEMINI_API_KEYS = [key for key in GEMINI_API_KEYS if key]  # Filter out None values
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")

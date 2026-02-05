@@ -53,6 +53,7 @@ class APIKeyManager:
             os.getenv("GOOGLE_API_KEY_7"),
             os.getenv("GOOGLE_API_KEY_8"),
             os.getenv("GOOGLE_API_KEY_9"),
+            os.getenv("GOOGLE_API_KEY_10"),
         ]
         return [key for key in keys if key]
 
@@ -67,7 +68,7 @@ class APIKeyManager:
             return 0
 
         # Try a quick test on key 9 first (often working)
-        if len(self.gemini_keys) >= 9:
+        if len(self.gemini_keys) >= 10:
             try:
                 import os
                 model_name = os.getenv("MODEL_NAME", "gemini-2.5-flash")
@@ -102,7 +103,7 @@ class APIKeyManager:
             except Exception as e:
                 if self._is_quota_error(e):
                     self._mark_key_quota_exceeded(key, e)
-                    logger.warning(f"Key {i+1}: Rate limited")
+                    logger.warning(f"Key {i+1}: Rate limited {model_name}")
                 else:
                     logger.warning(f"Key {i+1}: {str(e)[:50]}")
 
@@ -187,7 +188,7 @@ class APIKeyManager:
 
     def _mask_key(self, key: str) -> str:
         """Mask API key for logging"""
-        if not key or len(key) < 8:
+        if not key or len(key) < 10:
             return "***"
         return f"{key[:6]}...{key[-2:]}"
 
