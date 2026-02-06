@@ -1,16 +1,21 @@
+import os
 import time
 import asyncio
 import warnings
 import pandas as pd
 import streamlit as st
 from datetime import datetime
+from dotenv import load_dotenv
 from typing import Dict, Any, Tuple
 from utils.export_excel import export_results_to_excel
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.remediation_agent import get_enhanced_remediation_data
 from utils.risk_assessment import get_vulnerability_risk_assessment
+from enhanced_cve_search.improved_cve_search import EnhancedCVESearchSystem
 
 warnings.filterwarnings("ignore", category=UserWarning, module="langchain_google_genai")
+
+load_dotenv()
 
 # Page configuration
 st.set_page_config(
@@ -115,28 +120,11 @@ async def process_single_vulnerability_async(
     """Process a single vulnerability row with remediation for each CVE (async version)"""
     
     title = str(row.get(title_col, "")).strip()
-    vuln_type = str(row.get(type_col, "")).strip() if type_col else "Unknown"
+    asset_name = str(row.get("Asset Name", "")).strip()
     if not title or title == "nan":
         return None, "skipped_empty"
     
     try:
-        # ========== MODIFICATION START ==========
-        # Prepare vulnerability context for CVE validation
-        vulnerability_context = {
-            "Title": title,
-            "Operating System": str(row.get("Operating System", "Unknown")),
-            "QID": str(row.get("QID", "")),
-            "Asset Name": str(row.get("DNS", "")),
-            "Asset IP": str(row.get("IP", "")),
-            "Severity": str(row.get("Severity", "")),
-            "Category": str(row.get("Category", "")),
-            "Type": vuln_type
-        }
-        from enhanced_cve_search.improved_cve_search import EnhancedCVESearchSystem
-        
-        import os
-        from dotenv import load_dotenv
-        load_dotenv()
         tavily_key = os.getenv("TAVILY_API_KEY")
         if not tavily_key:
             print("❌ TAVILY_API_KEY not found")
@@ -150,15 +138,7 @@ async def process_single_vulnerability_async(
             max_cves=max_results_per_vuln
         )
         cve_results = getattr(cve_results, 'cves', [])  # Safe attribute access with fallback
-
         
-        # Call CVE search with context for validation
-        # cve_results = combined_cve_search(
-        #     title, s
-        #     max_results_per_vuln,
-        #     vulnerability_context=vulnerability_context  # Pass context
-        # )
-        # ========== MODIFICATION END ==========
         
         original_data = {col: str(row.get(col, "")) for col in row.index}
         
@@ -178,6 +158,7 @@ async def process_single_vulnerability_async(
                 
                 # Convert CVE object to dictionary format for risk assessment
                 cve_data = {
+                    "asset_name":asset_name,
                     "cve_id": cve.cve_id,
                     "description": cve.description,
                     "severity": cve.severity,

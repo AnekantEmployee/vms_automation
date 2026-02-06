@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field
 from langchain_tavily import TavilySearch
 from langgraph.graph import StateGraph, END
 from typing import Dict, Any, List, TypedDict
+from utils.export_excel import get_asset_criticality
+from enhanced_cve_search.exploit_search import CVEExploitSearcher
 
 # Add parent directory to path to import api_key_manager
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -186,6 +188,8 @@ class FastVulnerabilityRiskAgent:
             vuln_data = state["vulnerability_data"]
             cve_data = state.get("cve_data", {})
             severity = int(vuln_data.get('Severity', 3))
+            asset_name = cve_data.get('asset_name', "")
+            cve_id = cve_data.get('cve_id', "")
             cvss_score = float(cve_data.get('score', 0)) if cve_data.get('score') else 0
             trurisk_score = self._safe_float(vuln_data.get('TruRisk Score'))
             acs_score = self._safe_float(vuln_data.get('ACS'))
@@ -197,7 +201,7 @@ class FastVulnerabilityRiskAgent:
                 severity, cvss_score, trurisk_score, acs_score, 
                 detection_age, times_detected, is_pci
             )
-            risk_category = self._get_risk_category(risk_score, severity, is_pci, acs_score)
+            risk_category = self._get_risk_category(cvss_score, cve_id, asset_name)
             
             state["calculated_risk"] = {
                 "risk_score": risk_score,
@@ -289,19 +293,132 @@ class FastVulnerabilityRiskAgent:
             base_score = min(base_score + 1.5, 10)
         return round(base_score, 1)
     
-    def _get_risk_category(self, score: float, severity: int, is_pci: bool, acs: float) -> str:
-        if is_pci and severity >= 3:
+    def _get_risk_category(self, cvss_score: float, cve_id: str, asset_name: str) -> str:
+        """
+        Comprehensive risk categorization based on CVSS score, exploit status, and asset criticality.
+        
+        Args:
+            cvss_score: CVSS score from 0-10
+            cve_id: CVE identifier
+            asset_name: Name of the asset
+            
+        Returns:
+            Risk category: "Critical", "High", "Medium", "Low", or "Info"
+        """
+        searcher = CVEExploitSearcher()
+        
+        is_exploited = searcher.search_cve(cve_id).found
+        asset_critical = get_asset_criticality(asset_name)
+        print("CVE ID", cve_id, "Searching for the Risk Category")
+        
+        # Validate CVSS score
+        if not 0 <= cvss_score <= 10:
+            raise ValueError(f"Invalid CVSS score: {cvss_score}. Must be between 0 and 10.")
+        
+        # Define CVSS severity bands
+        is_critical_cvss = cvss_score >= 9.0
+        is_high_cvss = 7.0 <= cvss_score < 9.0
+        is_medium_cvss = 4.0 <= cvss_score < 7.0
+        is_low_cvss = 0.1 <= cvss_score < 4.0
+        is_info = cvss_score < 0.1
+        
+        # Check asset criticality
+        is_critical_asset = asset_critical == "Critical"
+        is_non_critical_asset = asset_critical == "Non Critical"
+        is_unknown_asset = asset_critical == "Not found in asset list"
+        
+        # ========== CRITICAL RISK SCENARIOS ==========
+        
+        # Scenario 1: Actively exploited + Critical Asset + Any meaningful CVSS
+        if is_exploited and is_critical_asset and cvss_score >= 4.0:
             return "Critical"
-        if acs >= 8 and score >= 7:
+        
+        # Scenario 2: Actively exploited + Critical CVSS (9.0+)
+        if is_exploited and is_critical_cvss:
             return "Critical"
-        if score >= 8.0:
+        
+        # Scenario 3: Actively exploited + High CVSS (7.0+) on any asset
+        if is_exploited and cvss_score >= 7.0:
             return "Critical"
-        elif score >= 6.0:
+        
+        # Scenario 4: Critical CVSS (9.0+) on Critical Asset
+        if is_critical_cvss and is_critical_asset:
+            return "Critical"
+        
+        # Scenario 5: Critical CVSS (9.0+) on unknown asset (assume critical until proven otherwise)
+        if is_critical_cvss and is_unknown_asset:
+            return "Critical"
+        
+        # Scenario 6: High CVSS (8.0+) + Exploited on any asset
+        if cvss_score >= 8.0 and is_exploited:
+            return "Critical"
+        
+        # Scenario 7: High CVSS (8.0+) on Critical Asset
+        if cvss_score >= 8.0 and is_critical_asset:
+            return "Critical"
+        
+        # ========== HIGH RISK SCENARIOS ==========
+        
+        # Scenario 1: Critical CVSS (9.0+) on non-critical asset
+        if is_critical_cvss and is_non_critical_asset:
             return "High"
-        elif score >= 4.0:
+        
+        # Scenario 2: High CVSS (7.0+) on Critical Asset
+        if is_high_cvss and is_critical_asset:
+            return "High"
+        
+        # Scenario 3: Actively exploited + Medium CVSS (4.0-6.9)
+        if is_exploited and is_medium_cvss:
+            return "High"
+        
+        # Scenario 4: High CVSS (8.0+) on unknown asset
+        if cvss_score >= 8.0 and is_unknown_asset:
+            return "High"
+        
+        # Scenario 5: High CVSS (7.0+) on any asset
+        if is_high_cvss:
+            return "High"
+        
+        # Scenario 6: Medium CVSS (6.0+) on Critical Asset
+        if cvss_score >= 6.0 and is_critical_asset:
+            return "High"
+        
+        # ========== MEDIUM RISK SCENARIOS ==========
+        
+        # Scenario 1: Medium CVSS (4.0-6.9) on Critical Asset
+        if is_medium_cvss and is_critical_asset:
             return "Medium"
-        else:
+        
+        # Scenario 2: Actively exploited + Low CVSS (< 4.0)
+        if is_exploited and is_low_cvss:
+            return "Medium"
+        
+        # Scenario 3: Medium CVSS (4.0-6.9) on unknown asset
+        if is_medium_cvss and is_unknown_asset:
+            return "Medium"
+        
+        # Scenario 4: Medium CVSS (4.0-6.9) on non-critical asset
+        if is_medium_cvss:
+            return "Medium"
+        
+        # ========== LOW RISK SCENARIOS ==========
+        
+        # Scenario 1: Low CVSS (0.1-3.9) on Critical Asset
+        if is_low_cvss and is_critical_asset:
             return "Low"
+        
+        # Scenario 2: Low CVSS on any other asset
+        if is_low_cvss:
+            return "Low"
+        
+        # ========== INFORMATIONAL ==========
+        
+        # CVSS score is negligible or zero
+        if is_info:
+            return "Info"
+        
+        # Default fallback (should rarely be reached)
+        return "Low"
     
     def _get_urgency(self, category: str) -> str:
         urgency_map = {
@@ -468,8 +585,7 @@ Provide specific exploitation methods focusing on:
             print(f"Exploitation methods generation error: {e}")
             return "Manual security assessment required to determine specific exploitation methods."
     
-    async def assess_risk(self, vulnerability_data: Dict[str, Any], 
-                         cve_data: Dict[str, Any] = None) -> RiskResult:
+    async def assess_risk(self, vulnerability_data: Dict[str, Any], cve_data: Dict[str, Any] = None) -> RiskResult:
         
         initial_state = RiskAgentState(
             vulnerability_data=vulnerability_data,
