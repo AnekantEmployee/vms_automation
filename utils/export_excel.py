@@ -1,6 +1,7 @@
 import io
 import pandas as pd
 from typing import Dict, Any, List
+from enhanced_cve_search.exploit_search import CVEExploitSearcher
 from .export_utils import determine_severity_score, get_days_diff, is_nan, clean_value, simplify_date, determine_sla_status
 
 def get_asset_criticality(ip):
@@ -16,6 +17,7 @@ def get_asset_criticality(ip):
 def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
     """Export with original report data, risk assessment, and remediation guidance for each CVE"""
     output = io.BytesIO()
+    searcher = CVEExploitSearcher()
 
     try:
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
@@ -131,6 +133,9 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                             else:
                                 immediate_actions_text = clean_value(immediate_actions)
                             
+                            # Getting Exploit Information
+                            exploit_results = searcher.search_cve(cve_id)
+                            
                             row.update({
                                 "CVE": cve_id,
                                 "Published Date": simplify_date(
@@ -163,6 +168,18 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                 "Reference_Links": clean_value(remediation.get("Reference Links", "")),
                                 "Additional_Resources": clean_value(remediation.get("Additional Resources", "")),
                             })
+                            
+                            if exploit_results.found:
+                                row.update({
+                                    "Exploited": "Yes",
+                                    "Exploit_URLs": ", ".join([exploit['url'] for exploit in exploit_results.exploits if 'url' in exploit])
+                                })
+                            else:
+                                row.update({
+                                    "Exploited": "No",
+                                    "Exploit_URLs": ""
+                                })   
+                            
                             detailed_rows.append(row)
                             
                             # Create remediation summary row for separate sheet
