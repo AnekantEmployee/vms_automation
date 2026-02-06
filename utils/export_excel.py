@@ -102,16 +102,6 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                             
                             cve_id = clean_value(getattr(cve, "cve_id", ""))
                             
-                            # Handle CWE info safely
-                            cwe_info = getattr(cve, "cwe_info", []) or []
-                            if isinstance(cwe_info, list):
-                                cwe_string = ", ".join(
-                                    str(item) for item in cwe_info 
-                                    if item is not None and not is_nan(item)
-                                )
-                            else:
-                                cwe_string = clean_value(cwe_info)
-                            
                             # Handle affected products safely  
                             affected_products = getattr(cve, "affected_products", []) or []
                             if isinstance(affected_products, list):
@@ -150,14 +140,12 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                 "CVE_Severity": clean_value(getattr(cve, "severity", "")),
                                 "CVE_Description": clean_value(getattr(cve, "description", "")),
                                 "CVE_Affected_Products": products_string,
-                                # Add risk assessment columns
                                 "Risk_Category": clean_value(risk_assessment.get("risk_category", "")),
                                 "Risk_Details": clean_value(risk_assessment.get("risk_details", "")),
                                 "Business_Impact": clean_value(risk_assessment.get("business_impact", "")),
                                 "Remediation_Urgency": clean_value(risk_assessment.get("remediation_urgency", "")),
                                 "Risk_Immediate_Actions": immediate_actions_text,
                                 "Exploitation_Methods": clean_value(risk_assessment.get("exploitation_methods", "")),  # NEW
-                                # Add remediation columns
                                 "Remediation_Guide": clean_value(remediation.get("Remediation Guide", "")),
                                 "Remediation_Priority": clean_value(remediation.get("Remediation Priority", "")),
                                 "Estimated_Effort": clean_value(remediation.get("Estimated Effort", "")),
