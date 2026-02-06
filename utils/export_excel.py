@@ -3,7 +3,15 @@ import pandas as pd
 from typing import Dict, Any, List
 from .export_utils import determine_severity_score, get_days_diff, is_nan, clean_value, simplify_date, determine_sla_status
 
+def get_asset_criticality(ip):
+    import pandas as pd
+    asset = pd.read_excel("data/Yash Asset List.xlsx")
 
+    if ip in asset['IP Address'].values:
+        criticality = asset[asset['IP Address'] == ip]['Machine Type'].values[0]
+        return criticality if criticality and not pd.isna(criticality) else "Not found in asset list"
+    
+    return "Not found in asset list"
 
 def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
     """Export with original report data, risk assessment, and remediation guidance for each CVE"""
@@ -21,6 +29,7 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                     original_data = result.get("original_data", {})
                     
                     # Calculate vulnerability age with error handling
+                    asset_name = clean_value(original_data.get("Asset Name"))
                     first_detected = clean_value(original_data.get("First Detected"))
                     last_detected = clean_value(original_data.get("Last Detected"))
                     vulnerability_age = get_days_diff(first_detected, last_detected)
@@ -31,9 +40,10 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                     # Build base row with safe value extraction
                     base_row = {
                         "Asset Id": clean_value(original_data.get("Asset Id")),
-                        "Asset Name": clean_value(original_data.get("Asset Name")),
+                        "Asset Name": asset_name,
                         "Asset IPV4": clean_value(original_data.get("Asset IPV4")),
                         "Asset IPV6": clean_value(original_data.get("Asset IPV6")),
+                        "Asset Criticality": get_asset_criticality(asset_name),
                         "Operating System": clean_value(original_data.get("Operating System")),
                         "QID": clean_value(original_data.get("QID")),
                         "Title": clean_value(original_data.get("Title")),
