@@ -7,7 +7,6 @@ from tavily import TavilyClient
 from typing import List, Dict, Any, Optional
 from enhanced_cve_search.cve_structures import (
     EnhancedCVEInfo,
-    EnhancedCWEInfo,
     StructuredSearchResults,
     EnhancedCVEParser,
     EnhancedCWEFetcher

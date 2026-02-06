@@ -379,7 +379,7 @@ def process_vulnerability_report(
         return None
 
     # Limit to first 5 rows
-    df = df.head(4)
+    df = df.sample(1)
     
     ChatInterface.add_message(
         f"✅ Processing {len(df)} rows with {max_workers} parallel workers (including AI remediation)", "success"
