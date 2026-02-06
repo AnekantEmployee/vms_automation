@@ -31,7 +31,6 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                     original_data = result.get("original_data", {})
                     
                     # Calculate vulnerability age with error handling
-                    asset_name = clean_value(original_data.get("Asset Name"))
                     first_detected = clean_value(original_data.get("First Detected"))
                     last_detected = clean_value(original_data.get("Last Detected"))
                     vulnerability_age = get_days_diff(first_detected, last_detected)
@@ -42,10 +41,10 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                     # Build base row with safe value extraction
                     base_row = {
                         "Asset Id": clean_value(original_data.get("Asset Id")),
-                        "Asset Name": asset_name,
+                        "Asset Name": clean_value(original_data.get("Asset Name")),
                         "Asset IPV4": clean_value(original_data.get("Asset IPV4")),
                         "Asset IPV6": clean_value(original_data.get("Asset IPV6")),
-                        "Asset Criticality": get_asset_criticality(asset_name),
+                        "Asset Criticality": get_asset_criticality(clean_value(original_data.get("Asset IPV4"))),
                         "Operating System": clean_value(original_data.get("Operating System")),
                         "QID": clean_value(original_data.get("QID")),
                         "Title": clean_value(original_data.get("Title")),

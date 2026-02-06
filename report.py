@@ -120,7 +120,7 @@ async def process_single_vulnerability_async(
     """Process a single vulnerability row with remediation for each CVE (async version)"""
     
     title = str(row.get(title_col, "")).strip()
-    asset_name = str(row.get("Asset Name", "")).strip()
+    asset_name = str(row.get("Asset IPV4", "")).strip()
     if not title or title == "nan":
         return None, "skipped_empty"
     
@@ -360,7 +360,7 @@ def process_vulnerability_report(
         return None
 
     # Limit to first 5 rows
-    df = df.sample(1)
+    df = df.sample(2)
     
     ChatInterface.add_message(
         f"✅ Processing {len(df)} rows with {max_workers} parallel workers (including AI remediation)", "success"
