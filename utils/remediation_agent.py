@@ -1,15 +1,18 @@
-import asyncio
-import time
-import json
 import os
 import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from dataclasses import dataclass
+from typing import Dict, Any, List
 from pydantic import BaseModel, Field
-from datetime import datetime, timedelta
-from typing import Dict, Any, List, Optional
 from config.api_key_manager import generate_content_with_fallback
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Import LLM configuration
+try:
+    from config.llm_config import REMEDIATION_TIMEOUT
+except ImportError:
+    REMEDIATION_TIMEOUT = 25
 
 # Pydantic models for output parsing
 class RemediationOutput(BaseModel):
@@ -250,7 +253,7 @@ class ImprovedRemediationAgent:
     
     async def _enhance_with_llm(self, template_result: RemediationResult, 
                                vuln_data: Dict, cve_info: Dict) -> RemediationResult:
-        """Enhance template with LLM-generated insights using API key rotation"""
+        """Enhance template with LLM-generated insights using API key rotation and timeout"""
         
         context = f"""
 Vulnerability Details:
@@ -277,7 +280,8 @@ Return a JSON object with these fields:
                 generation_config={
                     'temperature': 0.3,
                     'max_output_tokens': 1000
-                }
+                },
+                timeout=REMEDIATION_TIMEOUT
             )
             
             # Try to parse JSON response

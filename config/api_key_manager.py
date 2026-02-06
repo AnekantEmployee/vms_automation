@@ -2,9 +2,11 @@ import os
 import time
 import logging
 import warnings
+import asyncio
 from typing import Optional, List, Dict, Any, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from collections import deque
 
 # Suppress all FutureWarnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -19,6 +21,13 @@ os.environ['GRPC_TRACE'] = ''
 # Load environment variables
 load_dotenv()
 
+# Import LLM configuration
+try:
+    from config.llm_config import RATE_LIMIT_PER_MINUTE, LLM_TIMEOUT_SECONDS
+except ImportError:
+    RATE_LIMIT_PER_MINUTE = 15
+    LLM_TIMEOUT_SECONDS = 30
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -30,16 +39,20 @@ class APIKeyStatus:
     error_count: int = 0
     last_error: Optional[str] = None
     last_success: Optional[datetime] = None
+    request_times: deque = field(default_factory=lambda: deque(maxlen=100))
 
 class APIKeyManager:
     """Centralized API key management with intelligent fallback"""
 
-    def __init__(self):
+    def __init__(self, rate_limit_per_minute: int = None, timeout_seconds: int = None):
         self.gemini_keys = self._load_gemini_keys()
         self.current_key_index = self._find_best_starting_key()
         self.key_status: Dict[str, APIKeyStatus] = {}
+        self.rate_limit_per_minute = rate_limit_per_minute or RATE_LIMIT_PER_MINUTE
+        self.timeout_seconds = timeout_seconds or LLM_TIMEOUT_SECONDS
         self._initialize_key_status()
         self._test_keys_on_init()
+        logger.info(f"API Key Manager initialized: Rate limit={self.rate_limit_per_minute}/min, Timeout={self.timeout_seconds}s")
 
     def _load_gemini_keys(self) -> List[str]:
         """Load all available Gemini API keys"""
@@ -168,6 +181,7 @@ class APIKeyManager:
             status.last_success = datetime.now()
             status.error_count = 0
             status.quota_reset_time = None
+            status.request_times.append(datetime.now())
 
     def _check_key_recovery(self, key: str) -> bool:
         """Check if a quota-exceeded key can be retried"""
@@ -192,8 +206,41 @@ class APIKeyManager:
             return "***"
         return f"{key[:6]}...{key[-2:]}"
 
+    def _check_rate_limit(self, key: str) -> bool:
+        """Check if key is within rate limit"""
+        if key not in self.key_status:
+            return True
+        
+        status = self.key_status[key]
+        now = datetime.now()
+        one_minute_ago = now - timedelta(minutes=1)
+        
+        # Remove old requests
+        while status.request_times and status.request_times[0] < one_minute_ago:
+            status.request_times.popleft()
+        
+        return len(status.request_times) < self.rate_limit_per_minute
+    
+    def _wait_for_rate_limit(self, key: str):
+        """Wait until rate limit allows next request"""
+        if key not in self.key_status:
+            return
+        
+        status = self.key_status[key]
+        if not status.request_times:
+            return
+        
+        oldest_request = status.request_times[0]
+        wait_until = oldest_request + timedelta(minutes=1)
+        now = datetime.now()
+        
+        if now < wait_until:
+            wait_seconds = (wait_until - now).total_seconds()
+            logger.info(f"Rate limit reached for key {self._mask_key(key)}, waiting {wait_seconds:.1f}s")
+            time.sleep(wait_seconds)
+    
     def get_next_available_key(self) -> Optional[str]:
-        """Get next available API key with intelligent rotation"""
+        """Get next available API key with intelligent rotation and rate limiting"""
         if not self.gemini_keys:
             return None
 
@@ -206,8 +253,14 @@ class APIKeyManager:
         while attempts < len(self.gemini_keys):
             key = self.gemini_keys[self.current_key_index]
 
-            if self.key_status[key].is_active:
+            if self.key_status[key].is_active and self._check_rate_limit(key):
                 return key
+            
+            # If rate limited but active, wait
+            if self.key_status[key].is_active and not self._check_rate_limit(key):
+                self._wait_for_rate_limit(key)
+                if self._check_rate_limit(key):
+                    return key
 
             # Move to next key
             self.current_key_index = (self.current_key_index + 1) % len(self.gemini_keys)
@@ -232,10 +285,13 @@ class APIKeyManager:
 
     def execute_with_fallback(self, 
                             operation: Callable[[str], Any], 
-                            max_attempts: int = None) -> Any:
-        """Execute operation with automatic API key fallback"""
+                            max_attempts: int = None,
+                            timeout: int = None) -> Any:
+        """Execute operation with automatic API key fallback and timeout"""
         if max_attempts is None:
             max_attempts = len(self.gemini_keys)
+        if timeout is None:
+            timeout = self.timeout_seconds
 
         last_error = None
 
@@ -247,13 +303,32 @@ class APIKeyManager:
             try:
                 logger.info(f"Trying Gemini key {self.current_key_index + 1}/{len(self.gemini_keys)}")
 
-                # Execute the operation with current key
-                result = operation(key)
+                # Execute with timeout
+                import signal
+                
+                def timeout_handler(signum, frame):
+                    raise TimeoutError(f"Operation timed out after {timeout} seconds")
+                
+                # Set timeout (Unix-like systems)
+                if hasattr(signal, 'SIGALRM'):
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(timeout)
+                
+                try:
+                    result = operation(key)
+                finally:
+                    if hasattr(signal, 'SIGALRM'):
+                        signal.alarm(0)
 
                 # Mark success and return result
                 self._mark_key_success(key)
                 logger.info(f"Success with Gemini key {self.current_key_index + 1}")
                 return result
+
+            except TimeoutError as e:
+                last_error = e
+                logger.warning(f"Key {self.current_key_index + 1} timeout, trying next key")
+                self.current_key_index = (self.current_key_index + 1) % len(self.gemini_keys)
 
             except Exception as e:
                 last_error = e
@@ -265,7 +340,6 @@ class APIKeyManager:
 
                 elif self._is_server_error(e):
                     logger.warning(f"Key {self.current_key_index + 1} server error, trying next key")
-                    # Don't mark as quota exceeded for server errors
 
                 else:
                     logger.warning(f"Key {self.current_key_index + 1} failed: {error_str[:100]}")
@@ -276,6 +350,63 @@ class APIKeyManager:
                 # Add delay for server errors
                 if self._is_server_error(e) and attempt < max_attempts - 1:
                     time.sleep(2)
+
+        # All attempts failed
+        raise Exception(f"All {max_attempts} API key attempts failed. Last error: {last_error}")
+    
+    async def execute_with_fallback_async(self,
+                                        operation: Callable[[str], Any],
+                                        max_attempts: int = None,
+                                        timeout: int = None) -> Any:
+        """Async version with timeout support"""
+        if max_attempts is None:
+            max_attempts = len(self.gemini_keys)
+        if timeout is None:
+            timeout = self.timeout_seconds
+
+        last_error = None
+
+        for attempt in range(max_attempts):
+            key = self.get_next_available_key()
+            if not key:
+                raise Exception("No API keys available")
+
+            try:
+                logger.info(f"Trying Gemini key {self.current_key_index + 1}/{len(self.gemini_keys)}")
+
+                # Execute with timeout
+                result = await asyncio.wait_for(operation(key), timeout=timeout)
+
+                # Mark success and return result
+                self._mark_key_success(key)
+                logger.info(f"Success with Gemini key {self.current_key_index + 1}")
+                return result
+
+            except asyncio.TimeoutError:
+                last_error = TimeoutError(f"Operation timed out after {timeout} seconds")
+                logger.warning(f"Key {self.current_key_index + 1} timeout, trying next key")
+                self.current_key_index = (self.current_key_index + 1) % len(self.gemini_keys)
+
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
+
+                if self._is_quota_error(e):
+                    logger.warning(f"Key {self.current_key_index + 1} quota exceeded, trying next key")
+                    self._mark_key_quota_exceeded(key, e)
+
+                elif self._is_server_error(e):
+                    logger.warning(f"Key {self.current_key_index + 1} server error, trying next key")
+
+                else:
+                    logger.warning(f"Key {self.current_key_index + 1} failed: {error_str[:100]}")
+
+                # Move to next key for next attempt
+                self.current_key_index = (self.current_key_index + 1) % len(self.gemini_keys)
+
+                # Add delay for server errors
+                if self._is_server_error(e) and attempt < max_attempts - 1:
+                    await asyncio.sleep(2)
 
         # All attempts failed
         raise Exception(f"All {max_attempts} API key attempts failed. Last error: {last_error}")
@@ -332,8 +463,10 @@ def generate_content_with_fallback(prompt: str,
                                  model_name: str = "gemini-2.5-flash",
                                  temperature: float = None,
                                  max_output_tokens: int = None,
+                                 timeout: int = None,
+                                 generation_config: dict = None,
                                  **kwargs) -> str:
-    """Generate content with automatic API key fallback"""
+    """Generate content with automatic API key fallback, rate limiting, and timeout"""
     manager = get_api_key_manager()
     
     import os
@@ -344,11 +477,14 @@ def generate_content_with_fallback(prompt: str,
         model = genai.GenerativeModel(model_name)
         
         # Build generation config from parameters
-        config_params = {}
-        if temperature is not None:
-            config_params['temperature'] = temperature
-        if max_output_tokens is not None:
-            config_params['max_output_tokens'] = max_output_tokens
+        if generation_config:
+            config_params = generation_config
+        else:
+            config_params = {}
+            if temperature is not None:
+                config_params['temperature'] = temperature
+            if max_output_tokens is not None:
+                config_params['max_output_tokens'] = max_output_tokens
         
         # Generate content with config if parameters provided
         if config_params:
@@ -368,4 +504,4 @@ def generate_content_with_fallback(prompt: str,
                     return candidate.content.parts[0].text
         return "No response generated"
     
-    return manager.execute_with_fallback(_generate_content)
+    return manager.execute_with_fallback(_generate_content, timeout=timeout)

@@ -19,6 +19,12 @@ except ImportError:
     HAS_API_KEY_MANAGER = False
     print("Warning: API key manager not available, using standard LangChain")
 
+# Import LLM configuration
+try:
+    from config.llm_config import RISK_ASSESSMENT_TIMEOUT
+except ImportError:
+    RISK_ASSESSMENT_TIMEOUT = 20
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 load_dotenv()
@@ -307,7 +313,7 @@ class FastVulnerabilityRiskAgent:
         return urgency_map.get(category, "📅 Standard Priority")
     
     async def _generate_risk_details(self, vuln_data: Dict, calculated_risk: Dict, cve_data: Dict) -> str:
-        """Generate risk details with API key rotation support"""
+        """Generate risk details with API key rotation support and timeout"""
         try:
             if HAS_API_KEY_MANAGER:
                 # Use generate_content_with_fallback for automatic key rotation
@@ -328,7 +334,8 @@ Provide specific risk details focusing on:
 """
                 response = generate_content_with_fallback(
                     prompt,
-                    generation_config={'temperature': 0.3, 'max_output_tokens': 300}
+                    generation_config={'temperature': 0.3, 'max_output_tokens': 300},
+                    timeout=RISK_ASSESSMENT_TIMEOUT
                 )
                 return response.strip()
             else:
@@ -424,7 +431,7 @@ Provide specific risk details focusing on:
         return " ".join(impact_parts)
     
     async def _generate_exploitation_methods(self, vuln_data: Dict, cve_data: Dict) -> str:
-        """Generate exploitation methods with API key rotation support"""
+        """Generate exploitation methods with API key rotation support and timeout"""
         try:
             if not cve_data or not cve_data.get('description'):
                 return "Exploitation details require further investigation."
@@ -444,7 +451,8 @@ Provide specific exploitation methods focusing on:
 """
                 response = generate_content_with_fallback(
                     prompt,
-                    generation_config={'temperature': 0.2, 'max_output_tokens': 200}
+                    generation_config={'temperature': 0.2, 'max_output_tokens': 200},
+                    timeout=RISK_ASSESSMENT_TIMEOUT
                 )
                 return response.strip()
             else:

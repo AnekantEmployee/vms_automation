@@ -1,6 +1,5 @@
 import io
 import pandas as pd
-import streamlit as st
 from typing import Dict, Any, List
 from .export_utils import determine_severity_score, get_days_diff, is_nan, clean_value, simplify_date, determine_sla_status
 
@@ -31,14 +30,14 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                     
                     # Build base row with safe value extraction
                     base_row = {
-                        "Asset Id": clean_value(original_data.get("Asset ID")),
-                        "Asset Name": clean_value(original_data.get("DNS")),
-                        "Asset IPV4": clean_value(original_data.get("IP")),
-                        "Operating System": clean_value(original_data.get("OS")),
+                        "Asset Id": clean_value(original_data.get("Asset Id")),
+                        "Asset Name": clean_value(original_data.get("Asset Name")),
+                        "Asset IPV4": clean_value(original_data.get("Asset IPV4")),
+                        "Asset IPV6": clean_value(original_data.get("Asset IPV6")),
+                        "Operating System": clean_value(original_data.get("Operating System")),
                         "QID": clean_value(original_data.get("QID")),
                         "Title": clean_value(original_data.get("Title")),
                         "Severity": clean_value(original_data.get("Severity")),
-                        "KB Severity": "",
                         "Type Detected": (
                             "Confirmed"
                             if str(original_data.get("Type", "")).lower() == "vuln"
@@ -47,22 +46,18 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                         "First Detected": simplify_date(first_detected),
                         "Last Detected": simplify_date(last_detected),
                         "Protocol": clean_value(original_data.get("Protocol"), "-"),
+                        "Status": clean_value(original_data.get("Status"), "-"),
                         "Port": clean_value(original_data.get("Port"), "0"),
                         "Solution": clean_value(original_data.get("Solution")),
-                        "Asset Tags": clean_value(original_data.get("Associated Tags")),
+                        "Asset Tags": clean_value(original_data.get("Asset Tags")),
                         "Category": clean_value(original_data.get("Category")),
-                        "RTI": "",
                         "Last Reopened": clean_value(original_data.get("Last Reopened")),
                         "Times Detected": clean_value(original_data.get("Times Detected")),
                         "Threat": clean_value(original_data.get("Threat")),
-                        "Vulnerability Tags": "",
-                        "QVS Score": "",
                         "Detection AGE": vulnerability_age,
                         "TruRisk Score": clean_value(original_data.get("TruRisk Score")),
                         "Results": clean_value(original_data.get("Results")),
-                        "Vulnerability Status": "",
                         "Vulnerability Age": vulnerability_age,
-                        "Vulnerability Category": "",
                         "SLA Status": determine_sla_status(severity_score, vulnerability_age),
                         "Remediation Marks": "",
                     }
@@ -139,8 +134,6 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                                 "CVE_CVSS_Score": round(cve_score, 2),
                                 "CVE_Severity": clean_value(getattr(cve, "severity", "")),
                                 "CVE_Description": clean_value(getattr(cve, "description", "")),
-                                "CVE_Vector_String": clean_value(getattr(cve, "vector_string", "")),
-                                "CVE_CWE_Info": cwe_string,
                                 "CVE_Affected_Products": products_string,
                                 # Add risk assessment columns
                                 "Risk_Category": clean_value(risk_assessment.get("risk_category", "")),
@@ -213,8 +206,6 @@ def export_results_to_excel(processed_data: Dict[str, Any]) -> io.BytesIO:
                             "CVE_CVSS_Score": 0.0,
                             "CVE_Severity": "",
                             "CVE_Description": "",
-                            "CVE_Vector_String": "",
-                            "CVE_CWE_Info": "",
                             "CVE_Affected_Products": "",
                             # Empty risk assessment columns
                             "Risk_Category": "",
