@@ -1,12 +1,11 @@
 import re
 import json
-import time
-from datetime import datetime
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
+from datetime import datetime
 from tavily import TavilyClient
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from config.api_key_manager import generate_content_with_fallback
 
 
@@ -27,7 +26,7 @@ class ValidationResult:
 
 class ThreadedCVEValidator:
     """
-    Fast threaded CVE validation system
+    Fast threaded CVE validation system with robust fallback mechanisms
     """
     
     def __init__(self, tavily_api_key: str, max_workers: int = 8):
@@ -35,6 +34,37 @@ class ThreadedCVEValidator:
         self.max_workers = max_workers
         self.print_lock = Lock()
         
+        # Comprehensive vulnerability keyword mappings
+        self.vulnerability_patterns = {
+            "ssl/tls": ["ssl", "tls", "certificate", "crypto", "openssl", "x.509", "handshake"],
+            "authentication": ["authentication", "auth", "login", "credential", "password", "oauth", "saml"],
+            "injection": ["injection", "sql", "xss", "cross-site", "ldap", "command injection"],
+            "overflow": ["overflow", "buffer", "heap", "stack", "memory corruption"],
+            "rce": ["remote code", "execute", "rce", "arbitrary code", "code execution"],
+            "dos": ["denial of service", "dos", "ddos", "crash", "resource exhaustion"],
+            "privilege": ["privilege", "escalation", "elevation", "root", "admin"],
+            "path_traversal": ["path traversal", "directory traversal", "file inclusion"],
+            "deserialization": ["deserialization", "unserialize", "pickle"],
+            "xxe": ["xxe", "xml external entity", "xml injection"],
+            "csrf": ["csrf", "cross-site request forgery"],
+            "information_disclosure": ["information disclosure", "leak", "exposure", "sensitive data"],
+            "race_condition": ["race condition", "time-of-check", "toctou"],
+            "bypass": ["bypass", "circumvent", "evade", "filter bypass"]
+        }
+        
+        # Platform/product mappings
+        self.platform_patterns = {
+            "windows": ["windows", "microsoft", "win32", "win64", "ms", "iis"],
+            "linux": ["linux", "ubuntu", "debian", "rhel", "centos", "fedora", "suse"],
+            "unix": ["unix", "solaris", "aix", "bsd", "freebsd"],
+            "web": ["apache", "nginx", "tomcat", "iis", "http", "web server"],
+            "database": ["mysql", "postgresql", "mssql", "oracle", "mongodb", "database"],
+            "application": ["wordpress", "drupal", "joomla", "php", "java", "python", "node"],
+            "network": ["router", "switch", "firewall", "cisco", "juniper"],
+            "container": ["docker", "kubernetes", "container", "k8s"],
+            "cloud": ["aws", "azure", "gcp", "cloud", "s3"]
+        }
+    
     def validate_cve_batch(
         self,
         cves: List[Any],
@@ -43,11 +73,11 @@ class ThreadedCVEValidator:
         analysis: Optional[Dict[str, Any]] = None
     ) -> List[Any]:
         """
-        Validate CVEs using threading for speed
+        Validate CVEs using threading for speed with robust fallback
         """
         with self.print_lock:
             print(f"\n{'='*80}")
-            print(f"🔍 ADVANCED CVE VALIDATION")
+            print(f"🔍 ADVANCED CVE VALIDATION (With Robust Fallback)")
             print(f"{'='*80}")
             print(f"Validating {len(cves)} CVEs")
             print(f"Query: {vulnerability_description}")
@@ -105,80 +135,115 @@ class ThreadedCVEValidator:
         total: int
     ) -> ValidationResult:
         """
-        Validate a single CVE (thread-safe)
+        Validate a single CVE with multi-layered fallback (thread-safe)
         """
         with self.print_lock:
             print(f"\n[{index}/{total}] Validating {cve.cve_id}...")
         
-        # Stage 1: Context Matching (fast)
-        context_score = self._validate_context_match(cve, context)
+        # Stage 1: Context Matching (fast, no API)
+        context_score = self._validate_context_match_advanced(cve, context)
         
-        # Stage 2: Vulnerability Type Matching (fast)
-        vuln_type_match = self._validate_vulnerability_type(
+        # Stage 2: Vulnerability Type Matching (fast, no API)
+        vuln_type_match, vuln_match_score = self._validate_vulnerability_type_advanced(
             cve, vulnerability_description, analysis
         )
         
-        # Stage 3: Recency Scoring (fast)
+        # Stage 3: Recency Scoring (fast, no API)
         recency_score = self._calculate_recency_score(cve)
         
+        # Stage 4: Severity-based scoring (fast, no API)
+        severity_score = self._calculate_severity_score(cve)
+        
+        # Stage 5: Keyword similarity (fast, no API)
+        keyword_score = self._calculate_keyword_similarity(
+            cve, vulnerability_description, context
+        )
+        
         # Early exit for obviously irrelevant CVEs
-        if context_score < 0.2 and not vuln_type_match:
+        if context_score < 0.2 and not vuln_type_match and keyword_score < 0.3:
             with self.print_lock:
                 print(f"  📍 Context Match: {context_score:.2f}")
-                print(f"  🎯 Vulnerability Type Match: {vuln_type_match}")
+                print(f"  🎯 Vulnerability Type Match: {vuln_type_match} ({vuln_match_score:.2f})")
+                print(f"  🔑 Keyword Similarity: {keyword_score:.2f}")
                 print(f"  📅 Recency Score: {recency_score:.2f}")
-                print(f"  ❌ NOT RELEVANT - Score: 0.30")
-                print(f"     Reasoning: Poor context match and wrong vulnerability type")
+                print(f"  ❌ NOT RELEVANT - Score: 0.25")
+                print(f"     Reasoning: Poor context match, wrong vulnerability type, and low keyword similarity")
             
             return ValidationResult(
                 cve_id=cve.cve_id,
                 is_relevant=False,
-                relevance_score=0.30,
-                reasoning="Poor context match and wrong vulnerability type",
-                validation_method="fast-reject",
+                relevance_score=0.25,
+                reasoning="Poor context match, wrong vulnerability type, and low keyword similarity",
+                validation_method="fast-reject-rule-based",
                 context_match_score=context_score,
                 vulnerability_type_match=vuln_type_match,
                 platform_match=False,
                 recency_score=recency_score,
-                confidence=0.8
+                confidence=0.85
             )
         
-        # Stage 4: LLM validation for promising candidates
-        llm_validation = self._validate_with_llm(
+        # Stage 6: Try LLM validation (may fail)
+        llm_validation = self._validate_with_llm_safe(
             cve, vulnerability_description, context, analysis
         )
         
-        # Calculate final score
-        final_score = self._calculate_final_score(
-            context_score=context_score,
-            vuln_type_match=vuln_type_match,
-            llm_score=llm_validation['score'],
-            web_score=None,  # Skip web search for speed
-            recency_score=recency_score,
-            context=context
-        )
+        # Determine which scoring method to use
+        if llm_validation['success']:
+            # LLM worked - use it with higher weight
+            final_score = self._calculate_final_score_with_llm(
+                context_score=context_score,
+                vuln_match_score=vuln_match_score,
+                llm_score=llm_validation['score'],
+                keyword_score=keyword_score,
+                severity_score=severity_score,
+                recency_score=recency_score
+            )
+            validation_method = "llm-enhanced"
+            confidence = llm_validation.get('confidence', 0.7)
+        else:
+            # LLM failed - use rule-based fallback
+            final_score = self._calculate_final_score_rule_based(
+                context_score=context_score,
+                vuln_match_score=vuln_match_score,
+                keyword_score=keyword_score,
+                severity_score=severity_score,
+                recency_score=recency_score
+            )
+            validation_method = "rule-based-fallback"
+            confidence = 0.65  # Lower confidence without LLM
         
         # Generate reasoning
         reasoning = self._generate_reasoning(
             cve=cve,
             context_score=context_score,
             vuln_type_match=vuln_type_match,
+            vuln_match_score=vuln_match_score,
+            keyword_score=keyword_score,
             llm_validation=llm_validation,
-            web_verification=None,
-            final_score=final_score
+            final_score=final_score,
+            validation_method=validation_method
         )
         
-        # Determine if relevant
-        is_relevant = final_score >= 0.5
+        # Determine if relevant (adjustable threshold)
+        threshold = 0.45 if validation_method == "llm-enhanced" else 0.50
+        is_relevant = final_score >= threshold
         
         with self.print_lock:
             print(f"  📍 Context Match: {context_score:.2f}")
-            print(f"  🎯 Vulnerability Type Match: {vuln_type_match}")
-            print(f"  🤖 LLM Validation: {llm_validation['score']:.2f}")
+            print(f"  🎯 Vulnerability Type Match: {vuln_type_match} ({vuln_match_score:.2f})")
+            print(f"  🔑 Keyword Similarity: {keyword_score:.2f}")
+            print(f"  ⚠️  Severity Score: {severity_score:.2f}")
+            
+            if llm_validation['success']:
+                print(f"  🤖 LLM Validation: {llm_validation['score']:.2f} ✓")
+            else:
+                print(f"  🤖 LLM Validation: FAILED - Using rule-based fallback")
+            
             print(f"  📅 Recency Score: {recency_score:.2f}")
+            print(f"  🔧 Method: {validation_method}")
             
             if is_relevant:
-                print(f"  ✅ RELEVANT - Score: {final_score:.2f}")
+                print(f"  ✅ RELEVANT - Score: {final_score:.2f} (confidence: {confidence:.2f})")
                 print(f"     Reasoning: {reasoning[:100]}...")
             else:
                 print(f"  ❌ NOT RELEVANT - Score: {final_score:.2f}")
@@ -189,86 +254,181 @@ class ThreadedCVEValidator:
             is_relevant=is_relevant,
             relevance_score=final_score,
             reasoning=reasoning,
-            validation_method="threaded",
+            validation_method=validation_method,
             context_match_score=context_score,
             vulnerability_type_match=vuln_type_match,
             platform_match=(context_score > 0.5),
             recency_score=recency_score,
-            confidence=llm_validation.get('confidence', 0.7)
+            confidence=confidence
         )
     
-    def _validate_context_match(self, cve: Any, context: Optional[Dict[str, Any]]) -> float:
-        """Fast context matching"""
+    def _validate_context_match_advanced(
+        self, 
+        cve: Any, 
+        context: Optional[Dict[str, Any]]
+    ) -> float:
+        """Advanced context matching with detailed platform detection"""
         if not context:
             return 0.5
         
         score = 0.0
-        os_requirement = context.get("Operating System", "").lower()
+        affected_products = " ".join(cve.affected_products).lower()
+        cve_description = cve.description.lower()
+        combined_text = f"{affected_products} {cve_description}"
         
-        # Quick OS check
+        # Extract context requirements
+        os_requirement = context.get("Operating System", "").lower()
+        asset_type = context.get("Asset Type", "").lower()
+        
+        # OS/Platform matching
         if os_requirement:
-            affected_products = " ".join(cve.affected_products).lower()
-            cve_description = cve.description.lower()
-            
-            # Windows check
-            if "windows" in os_requirement:
-                if any(x in affected_products or x in cve_description 
-                      for x in ["windows", "microsoft"]):
-                    score += 0.5
-                elif any(x in affected_products or x in cve_description 
-                        for x in ["linux", "ubuntu", "debian"]):
-                    score -= 0.3
-            
-            # Linux check
-            elif "linux" in os_requirement or "ubuntu" in os_requirement:
-                if any(x in affected_products or x in cve_description 
-                      for x in ["linux", "ubuntu", "debian", "rhel"]):
-                    score += 0.5
-                elif any(x in affected_products or x in cve_description 
-                        for x in ["windows", "microsoft"]):
-                    score -= 0.3
+            for platform, keywords in self.platform_patterns.items():
+                if any(req in os_requirement for req in keywords):
+                    # Check if CVE matches this platform
+                    if any(kw in combined_text for kw in keywords):
+                        score += 0.6
+                    else:
+                        # Penalize if CVE is for a different platform
+                        other_platforms = [k for k in self.platform_patterns.keys() if k != platform]
+                        for other_platform in other_platforms:
+                            if any(kw in combined_text for kw in self.platform_patterns[other_platform]):
+                                score -= 0.4
+                                break
+        
+        # Asset type matching
+        if asset_type:
+            for asset_category, keywords in self.platform_patterns.items():
+                if any(asset in asset_type for asset in keywords):
+                    if any(kw in combined_text for kw in keywords):
+                        score += 0.3
         
         return max(0.0, min(1.0, score))
     
-    def _validate_vulnerability_type(
+    def _validate_vulnerability_type_advanced(
         self,
         cve: Any,
         vulnerability_description: str,
         analysis: Optional[Dict[str, Any]]
-    ) -> bool:
-        """Fast vulnerability type matching"""
+    ) -> tuple[bool, float]:
+        """
+        Advanced vulnerability type matching with scoring
+        Returns: (match_found, match_score)
+        """
         vuln_desc = vulnerability_description.lower()
         cve_desc = cve.description.lower()
         
-        # Key vulnerability patterns
-        patterns = {
-            "ssl": ["ssl", "tls", "certificate", "crypto"],
-            "auth": ["authentication", "auth", "login"],
-            "injection": ["injection", "sql", "xss"],
-            "overflow": ["overflow", "buffer"],
-            "rce": ["remote code", "execute", "rce"],
-        }
+        best_score = 0.0
+        match_found = False
         
-        for pattern_type, keywords in patterns.items():
-            if any(k in vuln_desc for k in keywords):
-                return any(k in cve_desc for k in keywords)
+        # Check each vulnerability pattern
+        for vuln_type, keywords in self.vulnerability_patterns.items():
+            # Check if query mentions this vulnerability type
+            query_matches = sum(1 for k in keywords if k in vuln_desc)
+            
+            if query_matches > 0:
+                # Check if CVE description mentions this vulnerability type
+                cve_matches = sum(1 for k in keywords if k in cve_desc)
+                
+                if cve_matches > 0:
+                    # Calculate match score based on keyword overlap
+                    match_score = min(1.0, (query_matches + cve_matches) / (len(keywords) * 0.5))
+                    best_score = max(best_score, match_score)
+                    match_found = True
         
-        return True  # Default to true if can't determine
+        # If no specific pattern matched, do general keyword matching
+        if not match_found:
+            query_words = set(vuln_desc.split())
+            cve_words = set(cve_desc.split())
+            common_words = query_words & cve_words
+            
+            if len(common_words) > 3:
+                match_found = True
+                best_score = min(0.7, len(common_words) / 10)
+        
+        return match_found, best_score
     
-    def _validate_with_llm(
+    def _calculate_keyword_similarity(
+        self,
+        cve: Any,
+        vulnerability_description: str,
+        context: Optional[Dict[str, Any]]
+    ) -> float:
+        """
+        Calculate keyword-based similarity between query and CVE
+        """
+        # Extract keywords from query
+        query_text = vulnerability_description.lower()
+        if context:
+            query_text += " " + " ".join(str(v).lower() for v in context.values())
+        
+        # Extract keywords from CVE
+        cve_text = f"{cve.description} {' '.join(cve.affected_products)}".lower()
+        
+        # Remove common stop words
+        stop_words = {'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'and', 'or', 'but'}
+        
+        query_words = set(w for w in re.findall(r'\w+', query_text) if len(w) > 2 and w not in stop_words)
+        cve_words = set(w for w in re.findall(r'\w+', cve_text) if len(w) > 2 and w not in stop_words)
+        
+        if not query_words:
+            return 0.5
+        
+        # Calculate Jaccard similarity
+        intersection = len(query_words & cve_words)
+        union = len(query_words | cve_words)
+        
+        if union == 0:
+            return 0.0
+        
+        jaccard_score = intersection / union
+        
+        # Boost score for exact product name matches
+        for product in cve.affected_products:
+            if product.lower() in query_text:
+                jaccard_score += 0.2
+                break
+        
+        return min(1.0, jaccard_score)
+    
+    def _calculate_severity_score(self, cve: Any) -> float:
+        """Calculate score based on CVE severity"""
+        cvss_score = getattr(cve, 'cvss_score', None)
+        
+        if cvss_score is None:
+            return 0.5
+        
+        try:
+            score = float(cvss_score)
+            # Normalize CVSS score (0-10) to 0-1
+            # Higher severity = slightly higher relevance
+            if score >= 9.0:
+                return 0.9
+            elif score >= 7.0:
+                return 0.7
+            elif score >= 4.0:
+                return 0.5
+            else:
+                return 0.3
+        except:
+            return 0.5
+    
+    def _validate_with_llm_safe(
         self,
         cve: Any,
         vulnerability_description: str,
         context: Optional[Dict[str, Any]],
         analysis: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        """Optimized LLM validation"""
-        context_str = ""
-        if context:
-            context_str = f"\nContext: {context.get('Operating System', '')} {context.get('Asset Type', '')}"
-        
-        # Shorter, focused prompt for speed
-        prompt = f"""Evaluate CVE relevance (respond with JSON only):
+        """
+        LLM validation with safe error handling
+        Returns success flag to enable fallback
+        """
+        try:
+            context_str = ""
+            if context:
+                context_str = f"\nContext: {context.get('Operating System', '')} {context.get('Asset Type', '')}"
+            
+            prompt = f"""Evaluate CVE relevance (respond with JSON only):
 
 Query: {vulnerability_description}{context_str}
 
@@ -284,46 +444,93 @@ JSON response:
 
 Score 0.0-0.3: Not relevant, Score 0.4-0.6: Partially relevant, Score 0.7-1.0: Highly relevant"""
 
-        try:
             response = generate_content_with_fallback(
                 prompt=prompt,
                 temperature=0.1,
-                max_output_tokens=200  # Reduced for speed
+                max_output_tokens=200
             )
             
             result = self._parse_json_fast(response)
             if result and "score" in result:
+                result['success'] = True
+                result['confidence'] = 0.75
                 return result
             
+            # Parsing failed
             return {
+                "success": False,
                 "score": 0.5,
-                "reasoning": "LLM parsing failed",
+                "reasoning": "LLM response parsing failed",
                 "confidence": 0.3
             }
         
         except Exception as e:
+            # LLM completely failed - signal to use fallback
             return {
+                "success": False,
                 "score": 0.5,
                 "reasoning": f"LLM error: {str(e)[:50]}",
                 "confidence": 0.2
             }
     
+    def _calculate_final_score_with_llm(
+        self,
+        context_score: float,
+        vuln_match_score: float,
+        llm_score: float,
+        keyword_score: float,
+        severity_score: float,
+        recency_score: float
+    ) -> float:
+        """Calculate final score when LLM is available"""
+        score = (
+            context_score * 0.25 +
+            vuln_match_score * 0.20 +
+            llm_score * 0.30 +
+            keyword_score * 0.15 +
+            severity_score * 0.05 +
+            recency_score * 0.05
+        )
+        
+        return max(0.0, min(1.0, score))
+    
+    def _calculate_final_score_rule_based(
+        self,
+        context_score: float,
+        vuln_match_score: float,
+        keyword_score: float,
+        severity_score: float,
+        recency_score: float
+    ) -> float:
+        """
+        Calculate final score using only rule-based methods (no LLM)
+        Redistributes LLM weight to other factors
+        """
+        score = (
+            context_score * 0.30 +      # Increased from 0.25
+            vuln_match_score * 0.30 +   # Increased from 0.20
+            keyword_score * 0.25 +      # Increased from 0.15
+            severity_score * 0.10 +     # Increased from 0.05
+            recency_score * 0.05        # Same
+        )
+        
+        return max(0.0, min(1.0, score))
+    
     def _parse_json_fast(self, response: str) -> Optional[Dict[str, Any]]:
-        """Fast JSON parsing"""
+        """Fast JSON parsing with multiple fallback strategies"""
+        # Strategy 1: Direct JSON parsing
         try:
-            # Clean response
             cleaned = response.strip()
             cleaned = re.sub(r'^```json\s*', '', cleaned, flags=re.IGNORECASE)
             cleaned = re.sub(r'\s*```$', '', cleaned)
             
-            # Try direct parsing
             result = json.loads(cleaned)
             if isinstance(result, dict) and "score" in result:
                 return result
         except:
             pass
         
-        # Regex fallback
+        # Strategy 2: Regex extraction
         try:
             score_match = re.search(r'"score":\s*([0-9.]+)', response)
             reasoning_match = re.search(r'"reasoning":\s*"([^"]+)"', response)
@@ -337,74 +544,93 @@ Score 0.0-0.3: Not relevant, Score 0.4-0.6: Partially relevant, Score 0.7-1.0: H
         except:
             pass
         
+        # Strategy 3: Look for score anywhere in response
+        try:
+            numbers = re.findall(r'\b([0-9]\.[0-9]+)\b', response)
+            if numbers:
+                score = float(numbers[0])
+                if 0.0 <= score <= 1.0:
+                    return {
+                        "score": score,
+                        "reasoning": "Extracted from response",
+                        "confidence": 0.3
+                    }
+        except:
+            pass
+        
         return None
     
     def _calculate_recency_score(self, cve: Any) -> float:
-        """Fast recency calculation"""
+        """Calculate recency score with better granularity"""
         if not cve.published_date:
             return 0.3
         
         try:
             pub_date = datetime.fromisoformat(cve.published_date.replace('Z', '+00:00'))
-            age_years = (datetime.now() - pub_date).days / 365.25
+            age_years = (datetime.now().replace(tzinfo=pub_date.tzinfo) - pub_date).days / 365.25
             
-            if age_years < 1:
+            if age_years < 0.5:
                 return 1.0
-            elif age_years < 3:
+            elif age_years < 1:
+                return 0.9
+            elif age_years < 2:
                 return 0.8
+            elif age_years < 3:
+                return 0.7
             elif age_years < 5:
-                return 0.6
+                return 0.5
             elif age_years < 10:
-                return 0.4
+                return 0.3
             else:
                 return 0.2
         except:
             return 0.5
-    
-    def _calculate_final_score(
-        self,
-        context_score: float,
-        vuln_type_match: bool,
-        llm_score: float,
-        web_score: Optional[float],
-        recency_score: float,
-        context: Optional[Dict[str, Any]]
-    ) -> float:
-        """Fast final score calculation"""
-        # Simplified weights for speed
-        score = (
-            context_score * 0.35 +
-            (1.0 if vuln_type_match else 0.0) * 0.25 +
-            llm_score * 0.30 +
-            recency_score * 0.10
-        )
-        
-        return max(0.0, min(1.0, score))
     
     def _generate_reasoning(
         self,
         cve: Any,
         context_score: float,
         vuln_type_match: bool,
+        vuln_match_score: float,
+        keyword_score: float,
         llm_validation: Dict[str, Any],
-        web_verification: Optional[Dict[str, Any]],
-        final_score: float
+        final_score: float,
+        validation_method: str
     ) -> str:
-        """Fast reasoning generation"""
+        """Generate comprehensive reasoning for the validation decision"""
         reasons = []
         
-        if llm_validation.get("reasoning"):
-            reasons.append(f"LLM Analysis: {llm_validation['reasoning']}")
+        # LLM reasoning (if available)
+        if llm_validation.get("success") and llm_validation.get("reasoning"):
+            reasons.append(f"LLM: {llm_validation['reasoning']}")
+        elif not llm_validation.get("success"):
+            reasons.append("LLM unavailable - using rule-based analysis")
         
+        # Context match reasoning
         if context_score > 0.7:
-            reasons.append("Strong context match")
+            reasons.append("Strong platform/context match")
+        elif context_score > 0.4:
+            reasons.append("Moderate platform/context match")
         elif context_score < 0.3:
-            reasons.append("Poor context match - may be wrong platform/software")
+            reasons.append("Poor platform/context match")
         
+        # Vulnerability type reasoning
         if vuln_type_match:
-            reasons.append("Vulnerability type matches")
+            if vuln_match_score > 0.7:
+                reasons.append("Strong vulnerability type match")
+            else:
+                reasons.append("Vulnerability type matches")
         else:
-            reasons.append("Vulnerability type does not match")
+            reasons.append("Vulnerability type mismatch")
+        
+        # Keyword similarity reasoning
+        if keyword_score > 0.6:
+            reasons.append("High keyword similarity")
+        elif keyword_score < 0.3:
+            reasons.append("Low keyword similarity")
+        
+        # Add validation method
+        reasons.append(f"Method: {validation_method}")
         
         return " | ".join(reasons)
 
@@ -418,7 +644,7 @@ def validate_cves_threaded(
     max_workers: int = 8
 ) -> List[Any]:
     """
-    Fast threaded CVE validation
+    Fast threaded CVE validation with robust fallback system
     """
     if not tavily_api_key:
         import os
