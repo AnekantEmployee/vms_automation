@@ -309,7 +309,7 @@ class FastVulnerabilityRiskAgent:
         
         is_exploited = searcher.search_cve(cve_id).found
         asset_critical = get_asset_criticality(asset_name)
-        print("CVE ID", cve_id, "Searching for the Risk Category")
+        print("CVE ID", cve_id, "Searching for the Risk Category", is_exploited, asset_critical)
         
         # Validate CVSS score
         if not 0 <= cvss_score <= 10:
