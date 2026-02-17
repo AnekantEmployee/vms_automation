@@ -315,94 +315,108 @@ class ThreadedCVEValidator:
         total: int
     ) -> ValidationResult:
         """
-        Validate a single CVE with multi-layered fallback (thread-safe)
-        NOW WITH SEMANTIC SIMILARITY
+        TWO-STAGE VALIDATION:
+        1. Pre-filter using non-LLM methods (fast)
+        2. LLM validation only for CVEs with 25-30%+ relevance
         """
         with self.print_lock:
             print(f"\n[{index}/{total}] Validating {cve.cve_id}...")
         
-        # Stage 1: Context Matching (fast, no API)
+        # ===== STAGE 1: PRE-FILTERING (NO LLM) =====
+        # Context Matching (fast, no API)
         context_score = self._validate_context_match_advanced(cve, context)
         
-        # Stage 2: Vulnerability Type Matching (fast, no API)
+        # Vulnerability Type Matching (fast, no API)
         vuln_type_match, vuln_match_score = self._validate_vulnerability_type_advanced(
             cve, vulnerability_description, analysis
         )
         
-        # Stage 3: Recency Scoring (fast, no API)
+        # Recency Scoring (fast, no API)
         recency_score = self._calculate_recency_score(cve)
         
-        # Stage 4: Severity-based scoring (fast, no API)
+        # Severity-based scoring (fast, no API)
         severity_score = self._calculate_severity_score(cve)
         
-        # Stage 5: Keyword similarity (fast, no API)
+        # Keyword similarity (fast, no API)
         keyword_score = self._calculate_keyword_similarity(
             cve, vulnerability_description, context
         )
         
-        # *** NEW Stage 6: Semantic Similarity (fast, no API) ***
+        # Semantic Similarity (fast, no API)
         semantic_score = self.similarity_matcher.calculate_similarity(
             vulnerability_description,
             cve.description,
             context
         )
         
-        # Enhanced early exit with semantic similarity consideration
-        if (context_score < 0.2 and not vuln_type_match and 
-            keyword_score < 0.3 and semantic_score < 0.25):
+        # Calculate pre-filter score (without LLM)
+        prefilter_score = self._calculate_prefilter_score(
+            context_score=context_score,
+            vuln_match_score=vuln_match_score,
+            keyword_score=keyword_score,
+            semantic_score=semantic_score,
+            severity_score=severity_score,
+            recency_score=recency_score
+        )
+        
+        with self.print_lock:
+            print(f"  📍 Context Match: {context_score:.2f}")
+            print(f"  🎯 Vulnerability Type Match: {vuln_type_match} ({vuln_match_score:.2f})")
+            print(f"  🔑 Keyword Similarity: {keyword_score:.2f}")
+            print(f"  🧬 Semantic Similarity: {semantic_score:.2f}")
+            print(f"  ⚠️  Severity Score: {severity_score:.2f}")
+            print(f"  📅 Recency Score: {recency_score:.2f}")
+            print(f"  🔍 Pre-filter Score: {prefilter_score:.2f}")
+        
+        # THRESHOLD CHECK: Only proceed to LLM if pre-filter score >= 25-30%
+        LLM_THRESHOLD = 0.25  # 25% relevance threshold
+        
+        if prefilter_score < LLM_THRESHOLD:
             with self.print_lock:
-                print(f"  📍 Context Match: {context_score:.2f}")
-                print(f"  🎯 Vulnerability Type Match: {vuln_type_match} ({vuln_match_score:.2f})")
-                print(f"  🔑 Keyword Similarity: {keyword_score:.2f}")
-                print(f"  🧬 Semantic Similarity: {semantic_score:.2f}")  # NEW
-                print(f"  📅 Recency Score: {recency_score:.2f}")
-                print(f"  ❌ NOT RELEVANT - Score: 0.25")
-                print(f"     Reasoning: Poor context match, wrong vulnerability type, low keyword and semantic similarity")
+                print(f"  ⚡ FAST REJECT - Below {LLM_THRESHOLD*100}% threshold")
+                print(f"  ❌ NOT RELEVANT - Score: {prefilter_score:.2f}")
+                print(f"     Reasoning: Pre-filter score too low, skipping LLM validation")
             
             return ValidationResult(
                 cve_id=cve.cve_id,
                 is_relevant=False,
-                relevance_score=0.25,
-                reasoning="Poor context match, wrong vulnerability type, low keyword and semantic similarity",
-                validation_method="fast-reject-rule-based",
+                relevance_score=prefilter_score,
+                reasoning=f"Pre-filter rejected: score {prefilter_score:.2f} below {LLM_THRESHOLD} threshold",
+                validation_method="prefilter-reject",
                 context_match_score=context_score,
                 vulnerability_type_match=vuln_type_match,
-                platform_match=False,
+                platform_match=context_score > 0.5,
                 recency_score=recency_score,
                 confidence=0.85,
-                semantic_similarity=semantic_score  # NEW
+                semantic_similarity=semantic_score
             )
         
-        # Stage 7: Try LLM validation (may fail)
+        # ===== STAGE 2: LLM VALIDATION (Only for promising CVEs) =====
+        with self.print_lock:
+            print(f"  ✅ PASSED PRE-FILTER - Proceeding to LLM validation...")
+        
         llm_validation = self._validate_with_llm_safe(
             cve, vulnerability_description, context, analysis
         )
         
-        # Determine which scoring method to use
+        # Determine final scoring based on LLM availability
         if llm_validation['success']:
-            # LLM worked - use it with higher weight
+            # LLM worked - combine with pre-filter score
             final_score = self._calculate_final_score_with_llm(
                 context_score=context_score,
                 vuln_match_score=vuln_match_score,
                 llm_score=llm_validation['score'],
                 keyword_score=keyword_score,
-                semantic_score=semantic_score,  # NEW
+                semantic_score=semantic_score,
                 severity_score=severity_score,
                 recency_score=recency_score
             )
-            validation_method = "llm-enhanced"
+            validation_method = "two-stage-llm-validated"
             confidence = llm_validation.get('confidence', 0.7)
         else:
-            # LLM failed - use rule-based fallback WITH SEMANTIC SIMILARITY
-            final_score = self._calculate_final_score_rule_based(
-                context_score=context_score,
-                vuln_match_score=vuln_match_score,
-                keyword_score=keyword_score,
-                semantic_score=semantic_score,  # NEW
-                severity_score=severity_score,
-                recency_score=recency_score
-            )
-            validation_method = "rule-based-fallback"
+            # LLM failed - use pre-filter score as final
+            final_score = prefilter_score
+            validation_method = "prefilter-only"
             confidence = 0.6
         
         # Determine relevance
@@ -419,15 +433,11 @@ class ThreadedCVEValidator:
             print(f"  📍 Context Match: {context_score:.2f}")
             print(f"  🎯 Vulnerability Type Match: {vuln_type_match} ({vuln_match_score:.2f})")
             print(f"  🔑 Keyword Similarity: {keyword_score:.2f}")
-            print(f"  🧬 Semantic Similarity: {semantic_score:.2f}")  # NEW
-            print(f"  ⚠️  Severity Score: {severity_score:.2f}")
-            
             if llm_validation['success']:
                 print(f"  🤖 LLM Validation: {llm_validation['score']:.2f}")
             else:
-                print(f"  🤖 LLM Validation: FAILED - Using rule-based fallback")
+                print(f"  🤖 LLM Validation: FAILED - Using pre-filter score")
             
-            print(f"  📅 Recency Score: {recency_score:.2f}")
             print(f"  🔧 Method: {validation_method}")
             
             status = "✅ RELEVANT" if is_relevant else "❌ NOT RELEVANT"
@@ -634,24 +644,25 @@ Return ONLY this JSON (no markdown, no explanation):
         
         return max(0.0, min(1.0, score))
     
-    def _calculate_final_score_rule_based(
+    def _calculate_prefilter_score(
         self,
         context_score: float,
         vuln_match_score: float,
         keyword_score: float,
-        semantic_score: float,  # NEW
+        semantic_score: float,
         severity_score: float,
         recency_score: float
     ) -> float:
         """
-        Calculate final score using only rule-based methods (no LLM)
-        NOW WITH SEMANTIC SIMILARITY AS A KEY FACTOR
+        Calculate pre-filter score using only non-LLM methods.
+        This determines if CVE is worth sending to LLM.
+        Semantic similarity has highest weight.
         """
         score = (
             context_score * 0.25 +        # Platform/OS match
             vuln_match_score * 0.20 +     # Vulnerability type match
             keyword_score * 0.15 +        # Keyword overlap
-            semantic_score * 0.30 +       # NEW - HIGHEST WEIGHT when no LLM!
+            semantic_score * 0.30 +       # Semantic similarity - HIGHEST WEIGHT
             severity_score * 0.05 +       # Severity
             recency_score * 0.05          # How recent
         )
