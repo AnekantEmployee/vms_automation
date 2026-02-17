@@ -177,7 +177,6 @@ async def process_single_vulnerability_async(
                     "score": cve.score,
                     "source": getattr(cve, 'source', 'Unknown'),
                     "vuln_status": getattr(cve, 'vuln_status', 'Unknown'),
-                    "cwe_info": getattr(cve, 'cwe_info', []),
                     "affected_products": getattr(cve, 'affected_products', []),
                     "references": getattr(cve, 'references', []),
                     "exploitability_score": getattr(cve, 'exploitability_score', 0.0),
@@ -370,7 +369,7 @@ def process_vulnerability_report(
         return None
 
     # Limit to first 5 rows
-    df = df.sample(8)
+    df = df.sample(1)
     
     ChatInterface.add_message(
         f"✅ Processing {len(df)} rows with {max_workers} parallel workers (including AI remediation)", "success"
@@ -382,7 +381,7 @@ def process_vulnerability_report(
         "skipped_empty": 0,
         "skipped_type": 0,
         "success": 0,
-        "success_no_cves": 0,
+        "no_cves": 0,
         "error": 0,
     }
 
@@ -415,24 +414,24 @@ def process_vulnerability_report(
 
             # Update statistics
             stats[status] += 1
-            if status in ["success", "success_no_cves"]:
+            if status == "success":
                 stats["processed"] += 1
                 results.append(result)
-
                 title = result["title"]
-                if status == "success":
-                    remediation_count = len(result.get("remediation_data", []))
-                    ChatInterface.add_message(
-                        f"✅ Found {result['cve_count']} CVE(s) with {remediation_count} remediation guides for '{title[:40]}...'",
-                        "success",
-                    )
-                else:
-                    ChatInterface.add_message(
-                        f"⚠️ No CVEs found for '{title[:40]}...'", "warning"
-                    )
+                remediation_count = len(result.get("remediation_data", []))
+                ChatInterface.add_message(
+                    f"✅ Found {result['cve_count']} CVE(s) with {remediation_count} remediation guides for '{title[:40]}...'",
+                    "success",
+                )
+            elif status == "no_cves":
+                stats["processed"] += 1
+                results.append(result)
+                ChatInterface.add_message(
+                    f"⚠️ No CVEs found for '{result['title'][:40]}...'", "warning"
+                )
             elif status == "error":
                 ChatInterface.add_message(
-                    f"❌ Error processing '{result['title'][:40]}...': {result['error']}",
+                    f"❌ Error processing row: {str(result) if result else 'Unknown error'}",
                     "error",
                 )
 
@@ -644,9 +643,8 @@ def main():
                         "modified_date": cve.modified_date,
                         "source": getattr(cve, 'source', 'Unknown'),
                         "vuln_status": getattr(cve, 'vuln_status', 'Unknown'),
-                        "cwe_info": getattr(cve, 'cwe_info', []),
                         "affected_products": getattr(cve, 'affected_products', []),
-                        "references": getattr(cve, 'references', [])[:5],  # Limit references
+                        "references": getattr(cve, 'references', [])[:5],
                         "exploitability_score": getattr(cve, 'exploitability_score', 0.0),
                         "impact_score": getattr(cve, 'impact_score', 0.0),
                         "vector_string": getattr(cve, 'vector_string', ''),

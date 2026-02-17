@@ -6,46 +6,6 @@ from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
 
 
-@dataclass
-class EnhancedCWEInfo:
-    """Enhanced CWE (Common Weakness Enumeration) Information with complete details"""
-    cwe_id: str
-    name: str
-    description: str
-    abstraction_level: str = "Unknown"
-    likelihood: str = "Unknown"
-    impact: str = "Unknown"
-    
-    # Additional detailed properties
-    status: str = "Unknown"  # Draft, Incomplete, Stable, Deprecated
-    weakness_ordinality: str = "Unknown"  # Primary, Resultant
-    applicable_platforms: List[str] = field(default_factory=list)
-    common_consequences: List[Dict[str, str]] = field(default_factory=list)  # [{"scope": "Confidentiality", "impact": "Read Data"}]
-    detection_methods: List[str] = field(default_factory=list)
-    potential_mitigations: List[str] = field(default_factory=list)
-    related_attack_patterns: List[str] = field(default_factory=list)  # CAPEC IDs
-    taxonomy_mappings: List[Dict[str, str]] = field(default_factory=list)
-    references: List[str] = field(default_factory=list)
-    
-    def to_dict(self):
-        return {
-            "cwe_id": self.cwe_id,
-            "name": self.name,
-            "description": self.description,
-            "abstraction_level": self.abstraction_level,
-            "likelihood": self.likelihood,
-            "impact": self.impact,
-            "status": self.status,
-            "weakness_ordinality": self.weakness_ordinality,
-            "applicable_platforms": self.applicable_platforms,
-            "common_consequences": self.common_consequences,
-            "detection_methods": self.detection_methods,
-            "potential_mitigations": self.potential_mitigations,
-            "related_attack_patterns": self.related_attack_patterns,
-            "taxonomy_mappings": self.taxonomy_mappings,
-            "references": self.references
-        }
-
 
 @dataclass
 class EnhancedCVEInfo:
@@ -66,10 +26,6 @@ class EnhancedCVEInfo:
     # Status and Source
     source: str = "NIST NVD"
     vuln_status: str = "Unknown"  # e.g., "Analyzed", "Modified", "Undergoing Analysis"
-    
-    # CWE Information
-    cwe_info: List[str] = field(default_factory=list)  # List of CWE IDs
-    cwe_details: List[EnhancedCWEInfo] = field(default_factory=list)  # Detailed CWE objects
     
     # Affected Products and References
     affected_products: List[str] = field(default_factory=list)
@@ -104,8 +60,6 @@ class EnhancedCVEInfo:
             "impact_score": self.impact_score,
             "source": self.source,
             "vuln_status": self.vuln_status,
-            "cwe_info": self.cwe_info,
-            "cwe_details": [cwe.to_dict() for cwe in self.cwe_details],
             "affected_products": self.affected_products,
             "references": self.references,
             "confidence_score": self.confidence_score,
@@ -122,14 +76,13 @@ class EnhancedCVEInfo:
 
 @dataclass
 class StructuredSearchResults:
-    """Structured results with separate CVE and CWE lists"""
+    """Structured results with CVE lists"""
     query: str
     timestamp: str
     context: Dict[str, Any]
     
-    # Separate categorized lists
+    # CVE list
     cves: List[EnhancedCVEInfo] = field(default_factory=list)
-    cwes: List[EnhancedCWEInfo] = field(default_factory=list)
     
     # Analysis and metadata
     analysis: Dict[str, Any] = field(default_factory=dict)
@@ -142,7 +95,6 @@ class StructuredSearchResults:
             "timestamp": self.timestamp,
             "context": self.context,
             "cves": [cve.to_dict() for cve in self.cves],
-            "cwes": [cwe.to_dict() for cwe in self.cwes],
             "analysis": self.analysis,
             "search_strategy": self.search_strategy,
             "summary_statistics": self.summary_statistics
@@ -152,19 +104,13 @@ class StructuredSearchResults:
         """Get list of CVE dictionaries"""
         return [cve.to_dict() for cve in self.cves]
     
-    def get_cwe_list(self) -> List[Dict[str, Any]]:
-        """Get list of CWE dictionaries"""
-        return [cwe.to_dict() for cwe in self.cwes]
-    
     def get_summary(self) -> Dict[str, Any]:
         """Get summary statistics"""
         return {
             "total_cves": len(self.cves),
-            "total_cwes": len(self.cwes),
             "severity_breakdown": self._get_severity_breakdown(),
             "average_cvss_score": self._get_average_cvss(),
             "average_relevance_score": self._get_average_relevance(),
-            "top_cwes": self._get_top_cwes(),
             "date_range": self._get_date_range()
         }
     
@@ -191,15 +137,7 @@ class StructuredSearchResults:
             return 0.0
         return sum(cve.relevance_score for cve in self.cves) / len(self.cves)
     
-    def _get_top_cwes(self) -> List[Dict[str, Any]]:
-        """Get top 5 most common CWEs"""
-        cwe_count = {}
-        for cve in self.cves:
-            for cwe_id in cve.cwe_info:
-                cwe_count[cwe_id] = cwe_count.get(cwe_id, 0) + 1
-        
-        top_cwes = sorted(cwe_count.items(), key=lambda x: x[1], reverse=True)[:5]
-        return [{"cwe_id": cwe_id, "count": count} for cwe_id, count in top_cwes]
+
     
     def _get_date_range(self) -> Dict[str, str]:
         """Get date range of CVEs"""
@@ -304,17 +242,7 @@ class EnhancedCVEParser:
                     "availabilityImpact": cvss_data.get("availabilityImpact", "")
                 }
             
-            # CWE IDs
-            cwe_ids = []
-            for weakness in cve_data.get("weaknesses", []):
-                for desc in weakness.get("description", []):
-                    if desc.get("lang") == "en":
-                        cwe_id = desc.get("value", "")
-                        if cwe_id.startswith("CWE-"):
-                            cwe_ids.append(cwe_id)
-            
-            # Remove duplicates while preserving order
-            cwe_ids = list(dict.fromkeys(cwe_ids))
+            # CWE IDs - removed
             
             # References
             references = []
@@ -357,7 +285,6 @@ class EnhancedCVEParser:
                 impact_score=impact_score,
                 published_date=cve_data.get("published", ""),
                 modified_date=cve_data.get("lastModified", ""),
-                cwe_info=cwe_ids,
                 affected_products=affected_products[:20],
                 references=references[:15],
                 source="NIST NVD",
@@ -385,95 +312,6 @@ class EnhancedCVEParser:
             return "UNKNOWN"
 
 
-class EnhancedCWEFetcher:
-    """Enhanced CWE fetcher with detailed information extraction"""
-    
-    def __init__(self, tavily_client: TavilyClient):
-        self.tavily = tavily_client
-        self.cwe_cache = {}
-    
-    def get_cwe_details(self, cwe_id: str) -> Optional[EnhancedCWEInfo]:
-        """Fetch detailed CWE information"""
-        if cwe_id in self.cwe_cache:
-            return self.cwe_cache[cwe_id]
-        
-        try:
-            # Search for CWE information
-            results = self.tavily.search(
-                query=f"{cwe_id} MITRE CWE details",
-                search_depth="advanced",
-                max_results=3,
-                include_domains=["cwe.mitre.org"]
-            )
-            
-            name = cwe_id
-            description = ""
-            abstraction_level = "Unknown"
-            
-            for result in results.get("results", []):
-                content = result.get("content", "")
-                title = result.get("title", "")
-                
-                # Extract name from title
-                if cwe_id in title:
-                    name_match = re.search(rf'{cwe_id}:\s*(.+?)(?:\s*-\s*|\s*\||\s*$)', title)
-                    if name_match:
-                        name = name_match.group(1).strip()
-                
-                # Extract description
-                if content and not description:
-                    description = content[:800]
-                
-                # Try to extract abstraction level
-                abstraction_match = re.search(r'Abstraction:\s*(\w+)', content, re.IGNORECASE)
-                if abstraction_match:
-                    abstraction_level = abstraction_match.group(1)
-            
-            # If we didn't get description from web search, use LLM
-            if not description:
-                description = self._get_cwe_description_with_llm(cwe_id)
-            
-            cwe_info = EnhancedCWEInfo(
-                cwe_id=cwe_id,
-                name=name,
-                description=description,
-                abstraction_level=abstraction_level
-            )
-            
-            self.cwe_cache[cwe_id] = cwe_info
-            return cwe_info
-            
-        except Exception as e:
-            print(f"    ⚠ Failed to fetch CWE {cwe_id}: {e}")
-            return EnhancedCWEInfo(
-                cwe_id=cwe_id,
-                name=cwe_id,
-                description=f"Common Weakness Enumeration: {cwe_id}"
-            )
-    
-    def _get_cwe_description_with_llm(self, cwe_id: str) -> str:
-        """Get CWE description using LLM"""
-        try:
-            from config.api_key_manager import generate_content_with_fallback
-            
-            prompt = f"""Provide a technical description (3-4 sentences) of {cwe_id}.
-Include:
-1. What the weakness is
-2. Why it's a security concern
-3. Common contexts where it occurs
-
-Be concise and technical."""
-
-            response = generate_content_with_fallback(
-                prompt=prompt,
-                temperature=0.1,
-                max_output_tokens=300
-            )
-            
-            return response.strip()
-        except Exception:
-            return f"Common Weakness Enumeration: {cwe_id}"
-
 
 # Example usage function
 def demonstrate_enhanced_structure():
@@ -492,22 +330,10 @@ def demonstrate_enhanced_structure():
         exploitability_score=3.9,
         impact_score=5.2,
         vuln_status="Analyzed",
-        cwe_info=["CWE-89", "CWE-79"],
         affected_products=["vendor1 product1", "vendor2 product2"],
         references=["https://example.com/advisory1", "https://example.com/patch1"],
         relevance_score=0.85,
         relevance_reasoning="High relevance due to matching vulnerability type and platform"
-    )
-    
-    # Create sample CWE
-    sample_cwe = EnhancedCWEInfo(
-        cwe_id="CWE-89",
-        name="SQL Injection",
-        description="The software constructs SQL queries using user input without proper validation...",
-        abstraction_level="Base",
-        likelihood="High",
-        impact="High",
-        status="Stable"
     )
     
     # Create structured results
@@ -515,22 +341,17 @@ def demonstrate_enhanced_structure():
         query="SQL injection vulnerability",
         timestamp=datetime.now().isoformat(),
         context={"Operating System": "Linux"},
-        cves=[sample_cve],
-        cwes=[sample_cwe]
+        cves=[sample_cve]
     )
     
     # Convert to dictionary
     results_dict = results.to_dict()
     
-    # Get separate lists
+    # Get CVE list
     cve_list = results.get_cve_list()
-    cwe_list = results.get_cwe_list()
     
     print("CVE List:")
     print(json.dumps(cve_list, indent=2))
-    
-    print("\nCWE List:")
-    print(json.dumps(cwe_list, indent=2))
     
     print("\nSummary:")
     print(json.dumps(results.get_summary(), indent=2))
