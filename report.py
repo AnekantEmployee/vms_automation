@@ -132,12 +132,22 @@ async def process_single_vulnerability_async(
         
         searcher = EnhancedCVESearchSystem(tavily_api_key=tavily_key)
         
-        cve_results = searcher.search_vulnerability(
+        search_results = searcher.search_vulnerability(
             vulnerability_description=title,
             context={"Operating System": str(row.get("Operating System", "Unknown"))},
             max_cves=max_results_per_vuln
         )
-        cve_results = getattr(cve_results, 'cves', [])  # Safe attribute access with fallback
+        # Extract CVE list from StructuredSearchResults object
+        cve_results = search_results.cves if hasattr(search_results, 'cves') else []
+        
+        print(f"\n{'='*60}")
+        print(f"DEBUG: Processing '{title[:50]}...'")
+        print(f"  - Search completed: {search_results is not None}")
+        print(f"  - Has 'cves' attribute: {hasattr(search_results, 'cves')}")
+        print(f"  - CVE count: {len(cve_results)}")
+        if cve_results:
+            print(f"  - First CVE: {cve_results[0].cve_id if cve_results else 'N/A'}")
+        print(f"{'='*60}\n")
         
         
         original_data = {col: str(row.get(col, "")) for col in row.index}
@@ -360,7 +370,7 @@ def process_vulnerability_report(
         return None
 
     # Limit to first 5 rows
-    df = df.sample(4)
+    df = df.sample(8)
     
     ChatInterface.add_message(
         f"✅ Processing {len(df)} rows with {max_workers} parallel workers (including AI remediation)", "success"
@@ -598,6 +608,75 @@ def main():
         st.subheader("💬 Processing Chat")
         ChatInterface.display_chat()
 
+    # Export JSON for each vulnerability
+    if st.session_state.processed_data:
+        st.divider()
+        st.subheader("💾 Export Individual Vulnerability JSON")
+        
+        data = st.session_state.processed_data
+        if data.get("results"):
+            import json
+            from io import BytesIO
+            
+            # Create JSON for each vulnerability
+            json_data = []
+            for result in data["results"]:
+                vuln_json = {
+                    "row_index": result.get("row_index"),
+                    "title": result.get("title"),
+                    "cve_count": result.get("cve_count", 0),
+                    "severity_summary": result.get("severity_summary", {}),
+                    "avg_score": result.get("avg_score", 0),
+                    "original_data": result.get("original_data", {}),
+                    "cves": [],
+                    "remediations": [],
+                    "risk_assessments": []
+                }
+                
+                # Add CVE details
+                for cve in result.get("cve_results", []):
+                    cve_dict = {
+                        "cve_id": cve.cve_id,
+                        "description": cve.description,
+                        "severity": cve.severity,
+                        "score": cve.score,
+                        "published_date": cve.published_date,
+                        "modified_date": cve.modified_date,
+                        "source": getattr(cve, 'source', 'Unknown'),
+                        "vuln_status": getattr(cve, 'vuln_status', 'Unknown'),
+                        "cwe_info": getattr(cve, 'cwe_info', []),
+                        "affected_products": getattr(cve, 'affected_products', []),
+                        "references": getattr(cve, 'references', [])[:5],  # Limit references
+                        "exploitability_score": getattr(cve, 'exploitability_score', 0.0),
+                        "impact_score": getattr(cve, 'impact_score', 0.0),
+                        "vector_string": getattr(cve, 'vector_string', ''),
+                        "cvss_version": getattr(cve, 'cvss_version', ''),
+                        "confidence_score": getattr(cve, 'confidence_score', 0.0)
+                    }
+                    vuln_json["cves"].append(cve_dict)
+                
+                # Add remediation data
+                for rem in result.get("remediation_data", []):
+                    vuln_json["remediations"].append(rem)
+                
+                # Add risk assessment data
+                for risk in result.get("risk_assessment_data", []):
+                    vuln_json["risk_assessments"].append(risk)
+                
+                json_data.append(vuln_json)
+            
+            # Create download button
+            json_str = json.dumps(json_data, indent=2, default=str)
+            json_bytes = BytesIO(json_str.encode())
+            
+            st.download_button(
+                label="📥 Download All Vulnerabilities JSON",
+                data=json_bytes.getvalue(),
+                file_name=f"vulnerabilities_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+    
     # Display results (unchanged from original)
     if st.session_state.processed_data:
         st.divider()
@@ -621,7 +700,26 @@ def main():
             )
             st.metric("Avg CVEs/Vuln", f"{avg_cves:.1f}")
 
-        # Here add the summary
+        # Detailed vulnerability breakdown
+        st.divider()
+        st.subheader("📋 Vulnerability Breakdown")
+        
+        breakdown_data = []
+        for result in data["results"]:
+            breakdown_data.append({
+                "Row": result.get("row_index", "N/A"),
+                "Title": result.get("title", "N/A")[:60] + "...",
+                "CVE Count": result.get("cve_count", 0),
+                "Avg CVSS": f"{result.get('avg_score', 0):.1f}",
+                "Severity Summary": ", ".join([f"{k}:{v}" for k, v in result.get("severity_summary", {}).items()]),
+                "Remediations": len(result.get("remediation_data", [])),
+                "Risk Assessments": len(result.get("risk_assessment_data", []))
+            })
+        
+        if breakdown_data:
+            import pandas as pd
+            breakdown_df = pd.DataFrame(breakdown_data)
+            st.dataframe(breakdown_df, use_container_width=True, hide_index=True)
         
         
         # Export
