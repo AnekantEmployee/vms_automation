@@ -324,7 +324,7 @@ class FastVulnerabilityRiskAgent:
         
         # Check asset criticality
         is_critical_asset = asset_critical == "Critical"
-        is_non_critical_asset = asset_critical == "Non Critical"
+        is_non_critical_asset = asset_critical == "Non Criticle"
         is_unknown_asset = asset_critical == "Not found in asset list"
         
         # ========== CRITICAL RISK SCENARIOS ==========

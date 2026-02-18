@@ -5,9 +5,19 @@ from enhanced_cve_search.exploit_search import CVEExploitSearcher
 from .export_utils import determine_severity_score, get_days_diff, is_nan, clean_value, simplify_date, determine_sla_status
 
 def get_asset_criticality(ip):
-    import pandas as pd
     asset = pd.read_excel("data/Yash Asset List.xlsx")
 
+    if ',' in str(ip):
+        ips = [i.strip() for i in str(ip).split(',')]
+        found_any = False
+        for single_ip in ips:
+            if single_ip in asset['IP Address'].values:
+                found_any = True
+                criticality = asset[asset['IP Address'] == single_ip]['Machine Type'].values[0]
+                if criticality and not pd.isna(criticality) and str(criticality).lower() == 'critical':
+                    return 'Critical'
+        return "Non Criticle" if found_any else "Not found in asset list"
+    
     if ip in asset['IP Address'].values:
         criticality = asset[asset['IP Address'] == ip]['Machine Type'].values[0]
         return criticality if criticality and not pd.isna(criticality) else "Not found in asset list"
