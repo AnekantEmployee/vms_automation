@@ -187,3 +187,6 @@ fabric.properties
 # Virtual Environment
 venv
 venv/
+
+# Application logs
+logs/
