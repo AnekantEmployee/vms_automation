@@ -190,3 +190,7 @@ venv/
 
 # Application logs
 logs/
+
+# Config files with secrets
+config.toml
+*.toml
