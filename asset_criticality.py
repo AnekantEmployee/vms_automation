@@ -50,17 +50,17 @@ def run_agent(ip, business_criticality, data_classification, owner):
         }
         cache[ip] = {"cached_at": datetime.now(timezone.utc).isoformat(), "data": result}
         _save_nmap_cache(cache)
-        print(f"[nmap] Done → {result['open_ports_count']} open ports, services: {result['services']}")
+        print(f"[nmap] Done -> {result['open_ports_count']} open ports, services: {result['services']}")
         return result
 
     def _shodan_lookup():
         print(f"[shodan] Checking {ip}...")
         try:
             shodan.Shodan(SHODAN_KEY).host(ip)
-            print(f"[shodan] Done → Internet-facing: True")
+            print("[shodan] Done -> Internet-facing: True")
             return True
-        except:
-            print(f"[shodan] Done → Internet-facing: False")
+        except Exception as e:
+            print(f"[shodan] Done -> Internet-facing: False ({type(e).__name__})")
             return False
 
     # Step 2+3+4 — Run nmap and Shodan in parallel; CVE lookup after nmap (needs services)
@@ -72,20 +72,24 @@ def run_agent(ip, business_criticality, data_classification, owner):
         asset["internet_facing"] = f_shodan.result()
 
     print(f"[2/3] Looking up CVEs for services: {asset['services']}...")
-    one_year_ago = datetime.now() - timedelta(days=365)
+    one_year_ago = (datetime.now() - timedelta(days=365)).replace(microsecond=0)
     def _fetch_cves(svc):
         print(f"[cve] Searching '{svc}'...")
-        return nvdlib.searchCVE(keywordSearch=svc, pubStartDate=one_year_ago, limit=10)
+        try:
+            return nvdlib.searchCVE(keywordSearch=svc, pubStartDate=one_year_ago, limit=10)
+        except Exception as e:
+            print(f"[cve] Skipping '{svc}': {e}")
+            return []
 
     cves = []
     with ThreadPoolExecutor(max_workers=min(len(asset["services"]) or 1, 5)) as ex:
-        for result in as_completed([ex.submit(_fetch_cves, svc) for svc in asset["services"]]):
+        for result in as_completed([ex.submit(_fetch_cves, svc) for svc in set(asset["services"])]):
             cves += result.result()
 
     scores = [c.score[1] for c in cves if c.score]
     asset["max_cvss"]           = max(scores, default=0)
     asset["critical_cve_count"] = sum(1 for c in cves if c.score and c.score[1] >= 9.0)
-    print(f"[cve] Done → {len(cves)} CVEs, max CVSS: {asset['max_cvss']}, critical: {asset['critical_cve_count']}")
+    print(f"[cve] Done -> {len(cves)} CVEs, max CVSS: {asset['max_cvss']}, critical: {asset['critical_cve_count']}")
 
     # Step 5+6 — LLM scoring + reasoning
     print(f"[3/3] LLM scoring + reasoning...")
@@ -120,10 +124,10 @@ def run_agent(ip, business_criticality, data_classification, owner):
         asset["tier"]        = "unknown"
         asset["tier_reason"] = raw  # fallback: store raw response
     asset["scanned_at"] = datetime.utcnow().isoformat() + "Z"
-    print(f"      → Score: {asset['score']}/10, Tier: {asset['tier']}")
+    print(f"      -> Score: {asset['score']}/10, Tier: {asset['tier']}")
     print("Done.\n")
     return asset
 
 # Run it
-result = run_agent("27.107.64.154", "medium", "internal", "itadmin@acme.com")
+result = run_agent("3.6.159.186", "medium", "public", "itadmin@acme.com")
 print(json.dumps(result, indent=2))
