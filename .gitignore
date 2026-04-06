@@ -176,6 +176,8 @@ fabric.properties
 .idea/
 
 # vs code
+env
+.env
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
@@ -187,3 +189,10 @@ fabric.properties
 # Virtual Environment
 venv
 venv/
+
+# Application logs
+logs/
+
+# Config files with secrets
+config.toml
+*.toml

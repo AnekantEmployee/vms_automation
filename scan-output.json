@@ -1,0 +1,17 @@
+{
+  "ip": "192.168.1.45",
+  "business_criticality": "high",
+  "data_classification": "pii",
+  "owner": "payments@acme.com",
+  "hostname": "nmap -oX - -sV --open -T4 -Pn 192.168.1.45",
+  "os": "unknown",
+  "open_ports_count": 0,
+  "services": [],
+  "internet_facing": false,
+  "max_cvss": 0,
+  "critical_cve_count": 0,
+  "score": 4,
+  "tier": "3",
+  "tier_reason": "The asset 192.168.1.45 is categorized as tier 3 due to its high business value and the presence of personally identifiable information (PII) data, which are top factors contributing to its relatively moderate score of 4/10. Although it is not internet-facing and has no known critical vulnerabilities (max CVSS: 0, critical CVEs: 0), the asset's high business importance and sensitive data handling warrant careful consideration and monitoring, hence the tier 3 classification.",
+  "scanned_at": "2026-04-06T09:08:40.176020Z"
+}

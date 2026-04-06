@@ -1,0 +1,11 @@
+{
+  "192.168.1.45": {
+    "cached_at": "2026-04-06T09:32:21.235032+00:00",
+    "data": {
+      "hostname": "nmap -oX - -sV --open -T4 -Pn 192.168.1.45",
+      "os": "unknown",
+      "open_ports_count": 0,
+      "services": []
+    }
+  }
+}
