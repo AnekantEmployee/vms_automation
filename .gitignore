@@ -176,6 +176,8 @@ fabric.properties
 .idea/
 
 # vs code
+env
+.env
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
