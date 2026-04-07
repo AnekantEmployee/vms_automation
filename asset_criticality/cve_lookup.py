@@ -26,19 +26,30 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-_LOOKBACK_DAYS = 365
-_MAX_PER_QUERY = 10
-_MAX_WORKERS   = 5
-_MAX_TOP_CVES  = 5
+_LOOKBACK_DAYS  = 365
+_CHUNK_DAYS     = 110   # NVD rejects date ranges > 120 days
+_MAX_PER_QUERY  = 10
+_MAX_WORKERS    = 5
+_MAX_TOP_CVES   = 5
 
 
 def _search(keyword: str) -> list:
-    since = (datetime.now() - timedelta(days=_LOOKBACK_DAYS)).replace(microsecond=0)
-    try:
-        return nvdlib.searchCVE(keywordSearch=keyword, pubStartDate=since, limit=_MAX_PER_QUERY)
-    except Exception as e:
-        print(f"[cve] Skipping '{keyword}': {e}")
-        return []
+    results, now = [], datetime.now().replace(microsecond=0)
+    end = now
+    start = now - timedelta(days=_LOOKBACK_DAYS)
+    while start < end:
+        chunk_end   = min(start + timedelta(days=_CHUNK_DAYS), end)
+        try:
+            results += nvdlib.searchCVE(
+                keywordSearch=keyword,
+                pubStartDate=start,
+                pubEndDate=chunk_end,
+                limit=_MAX_PER_QUERY,
+            )
+        except Exception as e:
+            print(f"[cve] Skipping '{keyword}' chunk {start.date()}–{chunk_end.date()}: {e}")
+        start = chunk_end
+    return results
 
 
 def run_cve_lookup(services: list[str], os_name: str = "") -> dict:
