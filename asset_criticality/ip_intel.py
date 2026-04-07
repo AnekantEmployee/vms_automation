@@ -113,8 +113,8 @@ def _shodan(ip: str) -> dict:
             "shodan_vulns":   list(host.get("vulns", {}).keys()),
             "internet_facing": True,
         }
-    except Exception as e:
-        print(f"[shodan] {type(e).__name__}: {e}")
+    except Exception:
+        print("[shodan] Unable to connect — skipping")
         return {"shodan_ports": [], "shodan_vulns": [], "internet_facing": False}
 
 
