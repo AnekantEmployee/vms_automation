@@ -29,7 +29,10 @@ Returns:
 
 import os
 import requests
+from dotenv import load_dotenv
 from asset_criticality.cache import cache_get, cache_set
+
+load_dotenv()
 
 ABUSEIPDB_KEY = os.getenv("ABUSEIPDB_API_KEY", "")
 SHODAN_KEY    = os.getenv("SHODAN_API_KEY", "")

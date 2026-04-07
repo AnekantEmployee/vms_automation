@@ -31,7 +31,7 @@ def run_nmap(ip: str) -> dict:
     # -T4  : aggressive timing (faster on LAN/cloud)
     # -Pn  : skip host-discovery ping (works even if ICMP is blocked)
     # -O   : OS detection (needs root; gracefully degrades if unavailable)
-    nm.scan(ip, arguments="-sV --open -T4 -Pn -O --osscan-guess")
+    nm.scan(ip, arguments="-sV --open -T4 -Pn")
 
     host_data = nm[ip] if ip in nm.all_hosts() else {}
     tcp        = host_data.get("tcp", {})

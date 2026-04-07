@@ -36,7 +36,9 @@ import json
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from dotenv import load_dotenv
 
+load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent))
 
 from asset_criticality.nmap_scan      import run_nmap
@@ -132,12 +134,11 @@ def run_agent(
 if __name__ == "__main__":
     print("\n=== Asset Criticality & Risk Agent ===")
 
-    ip                  = input("Target IP address                                        : ").strip()
-    declared_role       = input("Asset role          [Enter to let AI infer]              : ").strip() or "Unknown / Let AI infer"
-    data_classification = input("Data classification [public/internal/confidential/restricted] (default: internal): ").strip() or "internal"
-    environment         = input("Environment         [production/staging/development/dr]  (default: production)  : ").strip() or "production"
-    owner               = input("Owner email / team                                       : ").strip() or "unknown"
-    out                 = input("Save result to file [Enter to skip]                      : ").strip() or None
+    ip                  = input("Target IP address                                            : ").strip()
+    declared_role       = input("Asset role          [Enter to let AI infer]                  : ").strip() or "Unknown / Let AI infer"
+    data_classification = input("Data classification [public/internal/confidential/restricted] : ").strip() or "internal"
+    environment         = input("Environment         [production/staging/development/dr]       : ").strip() or "production"
+    owner               = input("Owner email / team                                            : ").strip() or "unknown"
 
     result = run_agent(
         ip=ip,
@@ -149,6 +150,7 @@ if __name__ == "__main__":
 
     print(json.dumps(result, indent=2, default=str))
 
-    if out:
-        Path(out).write_text(json.dumps(result, indent=2, default=str))
-        print(f"\nResult saved to: {out}")
+    out = Path("results") / f"{ip.replace('.', '_')}.json"
+    out.parent.mkdir(exist_ok=True)
+    out.write_text(json.dumps(result, indent=2, default=str))
+    print(f"\nResult saved to: {out}")
