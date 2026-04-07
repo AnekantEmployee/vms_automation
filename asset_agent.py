@@ -1,0 +1,163 @@
+"""
+agent.py — Asset Criticality & Risk Agent (main orchestrator)
+
+Pipeline:
+  ┌──────────────────────────────────┐
+  │   Org Inputs (4 fields only)     │
+  │   ip, role, data_class, env,     │
+  │   owner                          │
+  └──────────────┬───────────────────┘
+                 │
+         ┌───────▼────────┐
+         │  PARALLEL RECON │
+         │  nmap + ip_intel│  ← Step 1 (concurrent)
+         └───────┬─────────┘
+                 │
+         ┌───────▼────────┐
+         │  CVE LOOKUP     │  ← Step 2 (uses nmap services)
+         └───────┬─────────┘
+                 │
+         ┌───────▼────────────┐
+         │  LLM ROLE INFERENCE │  ← Step 3 (LLM call 1)
+         └───────┬─────────────┘
+                 │
+         ┌───────▼────────────┐
+         │  LLM RISK SCORING  │  ← Step 4 (LLM call 2)
+         └───────┬─────────────┘
+                 │
+         ┌───────▼────────────┐
+         │  FINAL RESULT DICT  │
+         └─────────────────────┘
+"""
+
+import sys
+import os
+import json
+from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from asset_criticality.nmap_scan      import run_nmap
+from asset_criticality.ip_intel       import run_ip_intel
+from asset_criticality.cve_lookup     import run_cve_lookup
+from asset_criticality.role_inference import run_role_inference
+from asset_criticality.risk_scoring   import run_risk_scoring
+from main_config.llm_manager          import get_master_llm
+
+
+def run_agent(
+    ip: str,
+    declared_role: str,
+    data_classification: str,
+    environment: str,
+    owner: str,
+) -> dict:
+    """
+    Run the full asset criticality & risk pipeline.
+
+    Parameters
+    ----------
+    ip                  : IPv4 address of the asset
+    declared_role       : Role provided by the org (e.g. "Active Directory / Domain Controller")
+    data_classification : "public" | "internal" | "confidential" | "restricted"
+    environment         : "production" | "staging" | "development" | "dr"
+    owner               : Email or team name of the asset owner
+
+    Returns
+    -------
+    Fully enriched asset dict ready for reporting / storage.
+    """
+
+    print("\n" + "="*60)
+    print(f"  Asset Criticality Agent  |  {ip}")
+    print("="*60)
+
+    # --- Base asset dict (org-provided inputs) ---
+    asset: dict = {
+        "ip":                  ip,
+        "declared_role":       declared_role,
+        "data_classification": data_classification,
+        "environment":         environment,
+        "owner":               owner,
+    }
+
+    # ── Step 1: Parallel asset_criticality (nmap + ip_intel) ──────────────────────
+    print("\n[Step 1/4] Running nmap + IP threat intel in parallel...")
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_nmap   = ex.submit(run_nmap, ip)
+        f_intel  = ex.submit(run_ip_intel, ip)
+        nmap_data  = f_nmap.result()
+        intel_data = f_intel.result()
+
+    asset.update(nmap_data)
+    asset.update(intel_data)
+
+    # ── Step 2: CVE lookup (depends on nmap services) ─────────────────
+    print(f"\n[Step 2/4] Looking up CVEs for services: {asset.get('services', [])}...")
+    cve_data = run_cve_lookup(
+        services=asset.get("services", []),
+        os_name=asset.get("os", ""),
+    )
+    asset.update(cve_data)
+
+    # ── Step 3: LLM role inference ────────────────────────────────────
+    print("\n[Step 3/4] LLM: Role inference & baseline criticality...")
+    llm, _ = get_master_llm(probe=False)
+    role_data = run_role_inference(llm, asset)
+    asset.update(role_data)
+    print(f"           Confirmed role : {asset.get('confirmed_role')}")
+    print(f"           Baseline       : {asset.get('baseline_criticality')}")
+    if asset.get("role_mismatch"):
+        print(f"           ⚠ Mismatch  : {asset.get('mismatch_note')}")
+
+    # ── Step 4: LLM risk scoring ──────────────────────────────────────
+    print("\n[Step 4/4] LLM: Composite risk score + tier + remediation...")
+    score_data = run_risk_scoring(llm, asset)
+    asset.update(score_data)
+    print(f"           Score : {asset.get('score')}/10")
+    print(f"           Tier  : Tier {asset.get('tier')} — {asset.get('tier_label')}")
+
+    # ── Finalise ──────────────────────────────────────────────────────
+    asset["scanned_at"] = datetime.now(timezone.utc).isoformat()
+
+    print("\n" + "="*60)
+    print("  DONE")
+    print("="*60 + "\n")
+    return asset
+
+
+# ── CLI entry point ───────────────────────────────────────────────────
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Asset Criticality & Risk Agent")
+    parser.add_argument("ip",    help="Target IP address")
+    parser.add_argument("--role", default="Unknown / Let AI infer",
+                        help="Asset role (e.g. 'Active Directory / Domain Controller')")
+    parser.add_argument("--data-class", default="internal",
+                        dest="data_classification",
+                        help="Data classification: public|internal|confidential|restricted")
+    parser.add_argument("--env", default="production",
+                        dest="environment",
+                        help="Environment: production|staging|development|dr")
+    parser.add_argument("--owner", default="unknown",
+                        help="Owner email or team name")
+    parser.add_argument("--out", default=None,
+                        help="Optional path to save JSON result")
+    args = parser.parse_args()
+
+    result = run_agent(
+        ip=args.ip,
+        declared_role=args.role,
+        data_classification=args.data_classification,
+        environment=args.environment,
+        owner=args.owner,
+    )
+
+    print(json.dumps(result, indent=2, default=str))
+
+    if args.out:
+        Path(args.out).write_text(json.dumps(result, indent=2, default=str))
+        print(f"\nResult saved to: {args.out}")
