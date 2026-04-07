@@ -23,3 +23,8 @@ Phase 5 — utils/remediation_agent.py + utils/risk_assessment.py + enhanced_cve
 from report.py can you implement comprehensive logging in each step note that there is threading so for that can you provide me sturcutred response if possible also logging file should be different for each run save it in a folder seprately and add in gitignore dont miss anything in logging everything I wnat
 
 somethings already done please complete
+
+
+
+
+streamlit run report.py --server.address 0.0.0.0 --server.port 8502

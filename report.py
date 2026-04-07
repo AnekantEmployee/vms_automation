@@ -98,10 +98,7 @@ class ChatInterface:
     def clear_chat():
         st.session_state.chat_messages = []
 
-<<<<<<< HEAD
 
-=======
->>>>>>> 5f17390f32b142dbb4bbb052afa8a537fd1c13e5
 def read_uploaded_file(uploaded_file) -> pd.DataFrame:
     """Read uploaded file"""
     file_ext = uploaded_file.name.split(".")[-1].lower()
