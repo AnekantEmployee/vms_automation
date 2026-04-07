@@ -128,36 +128,27 @@ def run_agent(
     return asset
 
 
-# ── CLI entry point ───────────────────────────────────────────────────
+# ── Interactive entry point ───────────────────────────────────────────
 if __name__ == "__main__":
-    import argparse
+    print("\n=== Asset Criticality & Risk Agent ===")
 
-    parser = argparse.ArgumentParser(description="Asset Criticality & Risk Agent")
-    parser.add_argument("ip",    help="Target IP address")
-    parser.add_argument("--role", default="Unknown / Let AI infer",
-                        help="Asset role (e.g. 'Active Directory / Domain Controller')")
-    parser.add_argument("--data-class", default="internal",
-                        dest="data_classification",
-                        help="Data classification: public|internal|confidential|restricted")
-    parser.add_argument("--env", default="production",
-                        dest="environment",
-                        help="Environment: production|staging|development|dr")
-    parser.add_argument("--owner", default="unknown",
-                        help="Owner email or team name")
-    parser.add_argument("--out", default=None,
-                        help="Optional path to save JSON result")
-    args = parser.parse_args()
+    ip                  = input("Target IP address                                        : ").strip()
+    declared_role       = input("Asset role          [Enter to let AI infer]              : ").strip() or "Unknown / Let AI infer"
+    data_classification = input("Data classification [public/internal/confidential/restricted] (default: internal): ").strip() or "internal"
+    environment         = input("Environment         [production/staging/development/dr]  (default: production)  : ").strip() or "production"
+    owner               = input("Owner email / team                                       : ").strip() or "unknown"
+    out                 = input("Save result to file [Enter to skip]                      : ").strip() or None
 
     result = run_agent(
-        ip=args.ip,
-        declared_role=args.role,
-        data_classification=args.data_classification,
-        environment=args.environment,
-        owner=args.owner,
+        ip=ip,
+        declared_role=declared_role,
+        data_classification=data_classification,
+        environment=environment,
+        owner=owner,
     )
 
     print(json.dumps(result, indent=2, default=str))
 
-    if args.out:
-        Path(args.out).write_text(json.dumps(result, indent=2, default=str))
-        print(f"\nResult saved to: {args.out}")
+    if out:
+        Path(out).write_text(json.dumps(result, indent=2, default=str))
+        print(f"\nResult saved to: {out}")
