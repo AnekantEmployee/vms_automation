@@ -1,0 +1,121 @@
+{
+  "ip": "3.6.159.186",
+  "declared_role": "Unknown / Let AI infer",
+  "data_classification": "internal",
+  "environment": "production",
+  "owner": "anekant@gmail.com",
+  "open_ports": [
+    22,
+    80,
+    443,
+    5000
+  ],
+  "open_ports_count": 4,
+  "services": [
+    "ssh",
+    "upnp",
+    "http"
+  ],
+  "service_details": [
+    {
+      "port": 22,
+      "name": "ssh",
+      "product": "OpenSSH",
+      "version": "8.7",
+      "state": "open"
+    },
+    {
+      "port": 80,
+      "name": "http",
+      "product": "nginx",
+      "version": "1.26.3",
+      "state": "open"
+    },
+    {
+      "port": 443,
+      "name": "http",
+      "product": "nginx",
+      "version": "1.26.3",
+      "state": "open"
+    },
+    {
+      "port": 5000,
+      "name": "upnp",
+      "product": "",
+      "version": "",
+      "state": "open"
+    }
+  ],
+  "os": "unknown",
+  "hostname": "ec2-3-6-159-186.ap-south-1.compute.amazonaws.com",
+  "internet_facing": true,
+  "asn": "AS16509",
+  "org": "Amazon.com, Inc.",
+  "country": "IN",
+  "hosting_provider": "AS16509 Amazon.com, Inc.",
+  "abuse_confidence": 0,
+  "abuse_reports": 0,
+  "is_known_scanner": false,
+  "greynoise_classification": "unknown",
+  "shodan_ports": [],
+  "shodan_vulns": [],
+  "threat_intel_summary": "The IP is publicly reachable on the internet. AbuseIPDB confidence score: 0% (0 reports).",
+  "total_cves": 99,
+  "critical_cves": 22,
+  "high_cves": 44,
+  "medium_cves": 31,
+  "low_cves": 2,
+  "max_cvss": 10.0,
+  "top_cves": [
+    {
+      "id": "CVE-2024-41794",
+      "cvss": 10.0,
+      "description": "A vulnerability has been identified in SENTRON 7KT PAC1260 Data Manager (All versions). Affected devices contain hardcoded credentials for remote access to the device operating system with root privil"
+    },
+    {
+      "id": "CVE-2025-32433",
+      "cvss": 10.0,
+      "description": "Erlang/OTP is a set of libraries for the Erlang programming language. Prior to versions OTP-27.3.3, OTP-26.2.5.11, and OTP-25.3.2.20, a SSH server may allow an attacker to perform unauthenticated remo"
+    },
+    {
+      "id": "CVE-2014-125121",
+      "cvss": 10.0,
+      "description": "Array Networks vAPV (version 8.3.2.17) and vxAG (version 9.2.0.34) appliances are affected by a privilege escalation vulnerability caused by a combination of hardcoded SSH credentials (or SSH private "
+    },
+    {
+      "id": "CVE-2025-20265",
+      "cvss": 10.0,
+      "description": "A vulnerability in the RADIUS subsystem implementation of Cisco Secure Firewall Management Center (FMC) Software could allow an unauthenticated, remote attacker to inject arbitrary shell commands that"
+    },
+    {
+      "id": "CVE-2025-43982",
+      "cvss": 9.8,
+      "description": "Shenzhen Tuoshi NR500-EA RG500UEAABxCOMSLICv3.4.2731.16.43 devices enable the SSH service by default. There is a hidden hard-coded root account that cannot be disabled in the GUI."
+    }
+  ],
+  "confirmed_role": "Web / App Server",
+  "detected_roles": [
+    "Web / App Server",
+    "Endpoint / Jump host"
+  ],
+  "role_confidence": "high",
+  "role_mismatch": false,
+  "mismatch_note": "",
+  "baseline_criticality": "high",
+  "role_reasoning": "The presence of open ports 80, 443, and associated services 'http' with 'nginx' product, indicates a web server role. Additionally, the open port 22 with 'ssh' service suggests an endpoint or jump host role. The hostname, although not explicitly indicating a specific role, coupled with the services and ports, reinforces the web/app server and endpoint/jump host roles.",
+  "score": 8.8,
+  "tier": "1",
+  "tier_label": "Critical",
+  "risk_factors": [
+    "High baseline criticality due to confirmed Web / App Server role",
+    "Vulnerability exposure with 22 critical CVEs and a max CVSS of 10.0",
+    "Internet-facing with 4 open ports, including SSH and HTTP"
+  ],
+  "remediation": [
+    "Immediately patch all critical vulnerabilities, prioritizing those with a CVSS score of 10.0",
+    "Implement a Web Application Firewall (WAF) to mitigate potential web-based attacks",
+    "Restrict SSH access to only necessary IP addresses and implement multi-factor authentication"
+  ],
+  "summary": "The asset's risk posture is critical due to its high baseline criticality, vulnerability exposure, and internet-facing nature. The presence of critical vulnerabilities and open ports increases the likelihood of a successful attack. Immediate remediation efforts are necessary to patch vulnerabilities, restrict access, and implement additional security controls to mitigate potential risks.",
+  "scanned_at": "2026-04-07T17:36:37.698322+00:00"
+}

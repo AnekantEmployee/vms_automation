@@ -1,0 +1,51 @@
+{
+  "3.6.159.186": {
+    "cached_at": "2026-04-07T17:27:27.184553+00:00",
+    "value": {
+      "open_ports": [
+        22,
+        80,
+        443,
+        5000
+      ],
+      "open_ports_count": 4,
+      "services": [
+        "ssh",
+        "upnp",
+        "http"
+      ],
+      "service_details": [
+        {
+          "port": 22,
+          "name": "ssh",
+          "product": "OpenSSH",
+          "version": "8.7",
+          "state": "open"
+        },
+        {
+          "port": 80,
+          "name": "http",
+          "product": "nginx",
+          "version": "1.26.3",
+          "state": "open"
+        },
+        {
+          "port": 443,
+          "name": "http",
+          "product": "nginx",
+          "version": "1.26.3",
+          "state": "open"
+        },
+        {
+          "port": 5000,
+          "name": "upnp",
+          "product": "",
+          "version": "",
+          "state": "open"
+        }
+      ],
+      "os": "unknown",
+      "hostname": "ec2-3-6-159-186.ap-south-1.compute.amazonaws.com"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "3.6.159.186": {
+    "cached_at": "2026-04-07T17:36:04.202768+00:00",
+    "value": {
+      "internet_facing": true,
+      "asn": "AS16509",
+      "org": "Amazon.com, Inc.",
+      "country": "IN",
+      "hosting_provider": "AS16509 Amazon.com, Inc.",
+      "abuse_confidence": 0,
+      "abuse_reports": 0,
+      "is_known_scanner": false,
+      "greynoise_classification": "unknown",
+      "shodan_ports": [],
+      "shodan_vulns": [],
+      "threat_intel_summary": "The IP is publicly reachable on the internet. AbuseIPDB confidence score: 0% (0 reports)."
+    }
+  }
+}
