@@ -30,10 +30,13 @@ def cache_get(store: str, key: str) -> dict | None:
     if not entry:
         return None
 
-    age_h = (
-        datetime.now(timezone.utc)
-        - datetime.fromisoformat(entry["cached_at"])
-    ).total_seconds() / 3600
+    try:
+        cached_at = datetime.fromisoformat(entry["cached_at"])
+        if cached_at.tzinfo is None:
+            cached_at = cached_at.replace(tzinfo=timezone.utc)
+        age_h = (datetime.now(timezone.utc) - cached_at).total_seconds() / 3600
+    except (ValueError, KeyError):
+        return None
 
     if age_h >= CACHE_TTL_H:
         return None  # expired
@@ -53,4 +56,4 @@ def cache_set(store: str, key: str, value: dict) -> None:
         "cached_at": datetime.now(timezone.utc).isoformat(),
         "value": value,
     }
-    path.write_text(json.dumps(data, indent=2))
+    path.write_text(json.dumps(data, indent=2, default=str))

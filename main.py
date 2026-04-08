@@ -4,6 +4,7 @@ from backend.routes.upload  import router as upload_router
 from backend.routes.websocket import router as ws_router
 from backend.routes.asset   import router as asset_router
 from backend.routes.exploit import router as exploit_router
+from backend.routes.qualys  import router as qualys_router
 import uvicorn
 
 app = FastAPI(title="VMS API")
@@ -20,6 +21,7 @@ app.include_router(upload_router,  prefix="/api")
 app.include_router(ws_router)
 app.include_router(asset_router,   prefix="/api")
 app.include_router(exploit_router, prefix="/api")
+app.include_router(qualys_router,  prefix="/api")
 
 @app.get("/")
 def health_check():

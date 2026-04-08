@@ -6,7 +6,8 @@ from backend.core.asset_criticality.ip_intel       import run_ip_intel
 from backend.core.asset_criticality.cve_lookup     import run_cve_lookup
 from backend.core.asset_criticality.role_inference import run_role_inference
 from backend.core.asset_criticality.risk_scoring   import run_risk_scoring
-from main_config.llm_manager          import get_master_llm
+from backend.core.asset_criticality.cache          import cache_get, cache_set
+from main_config.llm_manager                       import get_master_llm
 
 
 def run_asset_agent(
@@ -15,7 +16,15 @@ def run_asset_agent(
     data_classification: str,
     environment: str,
     owner: str,
+    force_refresh: bool = False,
 ) -> dict:
+    cache_key = f"{ip}:{environment}:{data_classification}"
+
+    if not force_refresh:
+        cached = cache_get("asset_agent_results", cache_key)
+        if cached:
+            return cached
+
     asset: dict = {
         "ip":                  ip,
         "declared_role":       declared_role,
@@ -41,4 +50,6 @@ def run_asset_agent(
     asset.update(run_risk_scoring(llm, asset))
 
     asset["scanned_at"] = datetime.now(timezone.utc).isoformat()
+
+    cache_set("asset_agent_results", cache_key, asset)
     return asset
