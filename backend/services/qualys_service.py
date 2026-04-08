@@ -56,23 +56,69 @@ def _parse_vulns(root: ET.Element) -> list[dict]:
             el = vuln.find(tag)
             return el.text.strip() if el is not None and el.text else ""
 
+        def get_all(tag):
+            return [el.text.strip() for el in vuln.findall(tag) if el.text]
+
+        def get_html(tag):
+            el = vuln.find(tag)
+            if el is None:
+                return ""
+            return (ET.tostring(el, encoding="unicode", method="text") or "").strip()
+
         record = {
-            "qid":           get("QID"),
-            "vuln_type":     get("VULN_TYPE"),
-            "severity":      get("SEVERITY_LEVEL"),
-            "title":         get("TITLE"),
-            "category":      get("CATEGORY"),
-            "patchable":     get("PATCHABLE"),
-            "published":     get("PUBLISHED_DATETIME"),
-            "last_modified": get("LAST_SERVICE_MODIFICATION_DATETIME"),
-            "cvss_base":     get("CVSS/BASE"),
-            "cvss3_base":    get("CVSS_V3/BASE"),
-            "cve_id":        ", ".join([c.text for c in vuln.findall(".//CVE_ID") if c.text]),
-            "threat_intel":  ", ".join([
+            # Identity
+            "qid":                  get("QID"),
+            "vuln_type":            get("VULN_TYPE"),
+            "severity":             get("SEVERITY_LEVEL"),
+            "title":                get("TITLE"),
+            "category":             get("CATEGORY"),
+            "sub_category":         get("SUB_CATEGORY"),
+            # Dates
+            "published":            get("PUBLISHED_DATETIME"),
+            "last_modified":        get("LAST_SERVICE_MODIFICATION_DATETIME"),
+            # Patch info
+            "patchable":            get("PATCHABLE"),
+            "patch_published":      get("PATCH_PUBLISHED_DATETIME"),
+            # CVSS v2
+            "cvss_base":            get("CVSS/BASE"),
+            "cvss_temporal":        get("CVSS/TEMPORAL"),
+            "cvss_vector":          get("CVSS/VECTOR_STRING"),
+            "cvss_access_vector":   get("CVSS/ACCESS"),
+            # CVSS v3
+            "cvss3_base":           get("CVSS_V3/BASE"),
+            "cvss3_temporal":       get("CVSS_V3/TEMPORAL"),
+            "cvss3_vector":         get("CVSS_V3/VECTOR_STRING"),
+            "cvss3_attack_vector":  get("CVSS_V3/ATTACK"),
+            # References
+            "cve_ids":              get_all(".//CVE_ID"),
+            "bugtraq_ids":          get_all(".//BUGTRAQ_ID"),
+            "vendor_refs":          get_all(".//VENDOR_REFERENCE_LIST/VENDOR_REFERENCE/ID"),
+            # Threat intelligence
+            "threat_intel":         ", ".join([
                 ti.find("LABEL").text
                 for ti in vuln.findall(".//THREAT_INTELLIGENCE/THREAT_INTEL")
                 if ti.find("LABEL") is not None
             ]),
+            # Affected software
+            "affected_software":    get_all(".//SOFTWARE_LIST/SOFTWARE/PRODUCT"),
+            # Compliance
+            "compliance":           [
+                {
+                    "type":        c.findtext("TYPE") or "",
+                    "section":     c.findtext("SECTION") or "",
+                    "description": c.findtext("DESCRIPTION") or "",
+                }
+                for c in vuln.findall(".//COMPLIANCE_LIST/COMPLIANCE")
+            ],
+            # Content
+            "diagnosis":            get_html("DIAGNOSIS"),
+            "consequence":          get_html("CONSEQUENCE"),
+            "solution":             get_html("SOLUTION"),
+            "exploitability":       get("EXPLOITABILITY"),
+            "associated_malware":   get("ASSOCIATED_MALWARE"),
+            "news_or_patch":        get("NEWS_OR_PATCH"),
+            "is_disabled":          get("IS_DISABLED"),
+            "is_ignored":           get("IS_IGNORED"),
         }
         vulns.append(record)
     return vulns
