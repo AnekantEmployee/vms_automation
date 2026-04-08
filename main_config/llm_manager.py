@@ -443,62 +443,108 @@ def get_all_groq_models() -> List[str]:
 
 def get_master_llm(
     temperature: Optional[float] = None,
-    test_prompt: str = "hi",
     prefer_groq: bool = True,
-    probe: bool = True,
+    # probe kept for backward compat but ignored — rotation happens at call time
+    probe: bool = False,
+    test_prompt: str = "hi",
 ) -> Tuple[LLM, str]:
     """
-    Return the best available LLM with full automatic fallback.
-
-    Strategy:
-      1. Try Groq first — cycles through all 5 models x all 5 keys (up to 25 attempts).
-      2. If Groq is completely exhausted, fall back to Gemini — cycles through
-         all 4 models x all ~37 keys.
-      3. Raise RuntimeError only when both providers are fully exhausted.
-
-    Args:
-        temperature:  Temperature applied to both providers.
-        test_prompt:  Lightweight prompt used to validate each candidate LLM.
-        prefer_groq:  Set False to try Gemini first instead.
-
-    Returns:
-        Tuple of (LLM instance, provider_name) where provider_name is
-        "groq" or "gemini".
-
-    Example:
-        llm, provider = get_master_llm()
-        # pass llm to your CrewAI agents
+    Return an LLM instance at the current rotation position (no probe).
+    Use llm_call() for automatic runtime rotation on rate-limit errors.
     """
     if not USE_GROQ and not USE_GEMINI:
         raise RuntimeError("Both USE_GROQ and USE_GEMINI are disabled in .env.")
 
-    # Build ordered provider list based on flags and preference
-    providers = []
-    if prefer_groq:
-        if USE_GROQ:
-            providers.append((get_groq_llm_with_fallback, "groq"))
-        if USE_GEMINI:
-            providers.append((get_gemini_llm_with_fallback, "gemini"))
-    else:
-        if USE_GEMINI:
-            providers.append((get_gemini_llm_with_fallback, "gemini"))
-        if USE_GROQ:
-            providers.append((get_groq_llm_with_fallback, "groq"))
+    if prefer_groq and USE_GROQ and GROQ_API_KEYS:
+        key = GROQ_API_KEYS[_current_groq_key_index]
+        model = GROQ_MODELS[_current_groq_model_index]
+        temp = temperature if temperature is not None else GROQ_TEMPERATURE
+        logger.info(f"Master LLM: using groq ({model}, key #{_current_groq_key_index + 1}/{len(GROQ_API_KEYS)})")
+        return _build_groq_llm(key, model, temp), "groq"
 
-    if not providers:
-        raise RuntimeError("No providers enabled. Set USE_GROQ=true or USE_GEMINI=true in .env.")
+    if USE_GEMINI and GEMINI_API_KEYS:
+        key = GEMINI_API_KEYS[_current_gemini_key_index]
+        model = GEMINI_MODELS[_current_gemini_model_index]
+        temp = temperature if temperature is not None else GEMINI_TEMPERATURE
+        logger.info(f"Master LLM: using gemini ({model}, key #{_current_gemini_key_index + 1}/{len(GEMINI_API_KEYS)})")
+        return _build_gemini_llm(key, model, temp), "gemini"
 
-    last_err: Optional[Exception] = None
-    for fn, name in providers:
+    raise RuntimeError("No providers available. Check your .env file.")
+
+
+def _rotate_groq() -> None:
+    """Advance Groq rotation: key first, then model when all keys exhausted."""
+    global _current_groq_key_index, _current_groq_model_index
+    prev_key = _current_groq_key_index
+    prev_model = GROQ_MODELS[_current_groq_model_index]
+    _current_groq_key_index = (_current_groq_key_index + 1) % len(GROQ_API_KEYS)
+    if _current_groq_key_index == 0:
+        _current_groq_model_index = (_current_groq_model_index + 1) % len(GROQ_MODELS)
+    _llm_log.log_rotation(
+        provider="groq", reason="rate-limit",
+        from_model=prev_model, to_model=GROQ_MODELS[_current_groq_model_index],
+        from_key=prev_key, to_key=_current_groq_key_index,
+    )
+
+
+def _rotate_gemini() -> None:
+    """Advance Gemini rotation: key first, then model when all keys exhausted."""
+    global _current_gemini_key_index, _current_gemini_model_index
+    prev_key = _current_gemini_key_index
+    prev_model = GEMINI_MODELS[_current_gemini_model_index]
+    _current_gemini_key_index = (_current_gemini_key_index + 1) % len(GEMINI_API_KEYS)
+    if _current_gemini_key_index == 0:
+        _current_gemini_model_index = (_current_gemini_model_index + 1) % len(GEMINI_MODELS)
+    _llm_log.log_rotation(
+        provider="gemini", reason="rate-limit",
+        from_model=prev_model, to_model=GEMINI_MODELS[_current_gemini_model_index],
+        from_key=prev_key, to_key=_current_gemini_key_index,
+    )
+
+
+def llm_call(prompt: str, temperature: Optional[float] = None, prefer_groq: bool = True) -> str:
+    """
+    Call the LLM with full automatic runtime rotation on rate-limit errors.
+
+    Tries every Groq key x model combination, then every Gemini key x model.
+    Raises RuntimeError only when all combinations are exhausted.
+
+    Use this instead of llm.call(prompt) directly.
+    """
+    n_groq = len(GROQ_API_KEYS) * len(GROQ_MODELS)
+    n_gemini = len(GEMINI_API_KEYS) * len(GEMINI_MODELS)
+    total = (n_groq if USE_GROQ else 0) + (n_gemini if USE_GEMINI else 0)
+
+    groq_attempts = 0
+    gemini_attempts = 0
+
+    for attempt in range(total):
+        llm, provider = get_master_llm(temperature=temperature, prefer_groq=prefer_groq)
         try:
-            llm = fn(temperature=temperature, test_prompt=test_prompt, probe=probe)
-            logger.info(f"Master LLM: using {name}")
-            return llm, name
-        except RuntimeError as e:
-            logger.warning(f"Master LLM: {name} exhausted — {e}")
-            last_err = e
+            result = llm.call(prompt)
+            return result
+        except Exception as e:
+            if not _is_rate_limit_error(e):
+                raise
+            logger.warning(
+                f"[llm_call] Rate limit on attempt {attempt + 1}/{total} "
+                f"({provider}) — rotating..."
+            )
+            if provider == "groq":
+                groq_attempts += 1
+                if USE_GROQ and groq_attempts < n_groq:
+                    _rotate_groq()
+                else:
+                    # Groq exhausted — switch to Gemini
+                    prefer_groq = False
+            else:
+                gemini_attempts += 1
+                if USE_GEMINI and gemini_attempts < n_gemini:
+                    _rotate_gemini()
+                else:
+                    raise RuntimeError("All LLM providers exhausted.") from e
 
-    raise RuntimeError(f"All enabled providers exhausted. Last error: {last_err}")
+    raise RuntimeError("All LLM providers exhausted.")
 
 
 # ============================================================================
