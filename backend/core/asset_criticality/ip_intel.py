@@ -30,7 +30,7 @@ Returns:
 import os
 import requests
 from dotenv import load_dotenv
-from asset_criticality.cache import cache_get, cache_set
+from backend.core.asset_criticality.cache import cache_get, cache_set
 
 load_dotenv()
 

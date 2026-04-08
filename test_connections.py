@@ -7,10 +7,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from exploit_search.github_search      import search as github_search
-from exploit_search.exploitdb_search   import search as exploitdb_search
-from exploit_search.vulners_search     import search as circl_search      # now CIRCL
-from exploit_search.packetstorm_search import search as osv_search, nvd_enrich  # now OSV
+from backend.core.exploit_search.github_search      import search as github_search
+from backend.core.exploit_search.exploitdb_search   import search as exploitdb_search
+from backend.core.exploit_search.vulners_search     import search as circl_search      # now CIRCL
+from backend.core.exploit_search.packetstorm_search import search as osv_search, nvd_enrich  # now OSV
 
 TEST_CVE = "CVE-2021-44228"
 SEP = "=" * 60

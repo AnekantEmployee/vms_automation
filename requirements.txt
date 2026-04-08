@@ -15,5 +15,9 @@ python_pptx==1.0.2
 Requests==2.33.1
 shodan==1.31.0
 streamlit==1.47.1
-tavily_python==0.7.21
 tavily_python==0.7.11
+fastapi
+uvicorn[standard]
+openpyxl
+redis
+python-multipart

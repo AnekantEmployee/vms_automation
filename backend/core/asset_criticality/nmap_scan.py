@@ -14,7 +14,7 @@ Returns a normalised dict that the rest of the pipeline consumes:
 
 import socket
 import nmap
-from asset_criticality.cache import cache_get, cache_set
+from backend.core.asset_criticality.cache import cache_get, cache_set
 
 
 def run_nmap(ip: str) -> dict:
