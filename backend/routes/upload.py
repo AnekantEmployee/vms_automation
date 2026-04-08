@@ -8,21 +8,14 @@ router = APIRouter()
 @router.post("/upload")
 async def upload_excel(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
 ):
-    """
-    Accepts an Excel file, generates a unique job_id,
-    and starts background processing immediately.
-    Returns the job_id so the frontend can subscribe via WebSocket.
-    """
-    job_id = str(uuid.uuid4())
     file_bytes = await file.read()
-
-    # Fire off processing in the background — returns immediately
+    # job_id passed for WS compatibility, scan_id comes from DB
+    job_id = str(uuid.uuid4())
     background_tasks.add_task(process_excel, job_id, file_bytes, file.filename)
-
     return {
-        "job_id": job_id,
-        "message": "Processing started",
+        "job_id":   job_id,
+        "message":  "Processing started",
         "filename": file.filename,
     }

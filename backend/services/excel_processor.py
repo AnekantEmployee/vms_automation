@@ -1,50 +1,90 @@
 import io
-import pandas as pd
 import asyncio
-from backend.services.row_script import process_row
-from backend.queue.redis_queue import push_result
+import pandas as pd
+from backend.db.queries import (
+    create_scan_session, create_scan_rows,
+    update_scan_row_result, update_scan_row_error,
+    update_scan_session_status,
+)
+from backend.services.asset_service import run_asset_agent
 
 
-async def process_excel(job_id: str, file_bytes: bytes, filename: str = ""):
-    """
-    Reads the uploaded file (xlsx, xls, or csv), iterates over each row,
-    calls process_row(), and pushes each result to Redis.
-    """
+# Expected Excel columns → internal keys
+_COL_MAP = {
+    "asset_ip":              "ip",
+    "asset_role":            "declared_role",
+    "data_classification":   "data_classification",
+    "environment":           "environment",
+    "owner_email":           "owner",
+}
+
+
+def _read_df(file_bytes: bytes, filename: str) -> pd.DataFrame:
     ext = filename.rsplit(".", 1)[-1].lower() if filename else ""
-
     if ext == "csv":
         df = pd.read_csv(io.BytesIO(file_bytes))
     elif ext == "xls":
         df = pd.read_excel(io.BytesIO(file_bytes), engine="xlrd")
     else:
-        # default: try openpyxl, fall back to csv
         try:
             df = pd.read_excel(io.BytesIO(file_bytes), engine="openpyxl")
         except Exception:
             df = pd.read_csv(io.BytesIO(file_bytes))
-    total_rows = len(df)
 
-    for index, row in df.iterrows():
-        row_dict = row.to_dict()
+    # Normalise column names: lowercase + strip
+    df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+    df = df.rename(columns=_COL_MAP)
+    return df
 
-        # Run your (potentially blocking) row script in a thread
-        # so it doesn't block the async event loop
-        result = await asyncio.to_thread(process_row, row_dict)
 
-        payload = {
-            "job_id": job_id,
-            "row_index": int(index),
-            "total_rows": total_rows,
-            "row_data": row_dict,
-            "result": result,
-            "status": "processing",
-        }
+async def process_excel(job_id: str, file_bytes: bytes, filename: str = "") -> str:
+    """
+    1. Parse Excel
+    2. Create scan session in DB
+    3. Insert all asset rows as pending
+    4. Run asset agent for each row, update DB as results come in
+    Returns scan_id
+    """
+    df = _read_df(file_bytes, filename)
+    total = len(df)
 
-        await push_result(job_id, payload)
+    # 1. Create scan session
+    session = create_scan_session(filename=filename, total_assets=total)
+    scan_id = session["id"]
 
-    # Push a final "done" signal so the WebSocket knows to close
-    await push_result(job_id, {
-        "job_id": job_id,
-        "status": "done",
-        "total_rows": total_rows,
-    })
+    # 2. Build row payloads
+    rows_payload = []
+    for idx, row in df.iterrows():
+        rows_payload.append({
+            "row_index":           int(idx),
+            "ip":                  str(row.get("ip", "")).strip(),
+            "declared_role":       str(row.get("declared_role", "Unknown / Let AI infer")).strip(),
+            "data_classification": str(row.get("data_classification", "internal")).strip(),
+            "environment":         str(row.get("environment", "production")).strip(),
+            "owner":               str(row.get("owner", "unknown")).strip(),
+        })
+
+    # 3. Insert all rows as pending
+    db_rows = create_scan_rows(scan_id, rows_payload)
+    # Map row_index -> db row id
+    row_id_map = {r["row_index"]: r["id"] for r in db_rows}
+
+    # 4. Process each asset
+    async def _process_one(row_payload: dict):
+        row_id = row_id_map[row_payload["row_index"]]
+        try:
+            result = await asyncio.to_thread(
+                run_asset_agent,
+                row_payload["ip"],
+                row_payload["declared_role"],
+                row_payload["data_classification"],
+                row_payload["environment"],
+                row_payload["owner"],
+            )
+            update_scan_row_result(row_id, result)
+        except Exception as e:
+            update_scan_row_error(row_id, str(e))
+
+    await asyncio.gather(*[_process_one(r) for r in rows_payload])
+    update_scan_session_status(scan_id, "done")
+    return scan_id
