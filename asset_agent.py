@@ -73,7 +73,7 @@ def run_agent(
 
     # ── Step 3: LLM role inference ────────────────────────────────────
     print("\n[Step 3/4] LLM: Role inference & baseline criticality...")
-    llm, _ = get_master_llm(probe=False)
+    llm, _ = get_master_llm(probe=True)
     role_data = run_role_inference(llm, asset)
     asset.update(role_data)
     print(f"           Confirmed role : {asset.get('confirmed_role')}")
