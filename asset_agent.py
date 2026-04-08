@@ -1,42 +1,9 @@
-"""
-agent.py — Asset Criticality & Risk Agent (main orchestrator)
-
-Pipeline:
-  ┌──────────────────────────────────┐
-  │   Org Inputs (4 fields only)     │
-  │   ip, role, data_class, env,     │
-  │   owner                          │
-  └──────────────┬───────────────────┘
-                 │
-         ┌───────▼────────┐
-         │  PARALLEL RECON │
-         │  nmap + ip_intel│  ← Step 1 (concurrent)
-         └───────┬─────────┘
-                 │
-         ┌───────▼────────┐
-         │  CVE LOOKUP     │  ← Step 2 (uses nmap services)
-         └───────┬─────────┘
-                 │
-         ┌───────▼────────────┐
-         │  LLM ROLE INFERENCE │  ← Step 3 (LLM call 1)
-         └───────┬─────────────┘
-                 │
-         ┌───────▼────────────┐
-         │  LLM RISK SCORING  │  ← Step 4 (LLM call 2)
-         └───────┬─────────────┘
-                 │
-         ┌───────▼────────────┐
-         │  FINAL RESULT DICT  │
-         └─────────────────────┘
-"""
-
 import sys
-import os
 import json
-from datetime import datetime, timezone
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from dotenv import load_dotenv
+from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 load_dotenv()
 sys.path.insert(0, str(Path(__file__).parent))
