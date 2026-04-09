@@ -27,6 +27,16 @@ export async function getAssetDetail(scanId: string, rowId: string): Promise<Ass
   return res.json();
 }
 
+export async function deleteScan(scanId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/scans/${scanId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete scan");
+}
+
+export async function deleteAsset(scanId: string, rowId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/scans/${scanId}/${rowId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete asset");
+}
+
 export async function addManualAssets(scanId: string, assets: ManualAsset[]): Promise<void> {
   const res = await fetch(`${BASE}/api/scans/${scanId}/add/manual`, {
     method: "POST",
@@ -43,23 +53,6 @@ export async function addExcelAssets(scanId: string, file: File): Promise<void> 
   if (!res.ok) throw new Error("Failed to add assets from file");
 }
 
-export type ManualAsset = {
-  ip: string;
-  declared_role?: string;
-  data_classification?: string;
-  environment?: string;
-  owner?: string;
-};
-
-  const res = await fetch(`${BASE}/api/scans/${scanId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to delete scan");
-}
-
-export async function deleteAsset(scanId: string, rowId: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/scans/${scanId}/${rowId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to delete asset");
-}
-
 export function duration(start: string | null, end: string | null): string {
   if (!start || !end) return "—";
   const secs = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
@@ -74,6 +67,14 @@ export function createWebSocket(jobId: string): WebSocket {
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+export type ManualAsset = {
+  ip: string;
+  declared_role?: string;
+  data_classification?: string;
+  environment?: string;
+  owner?: string;
+};
 
 export type ScanSession = {
   id: string;
