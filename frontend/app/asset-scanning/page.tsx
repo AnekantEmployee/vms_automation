@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { listScans, uploadExcel, deleteScan, formatSecs, type ScanSession } from "@/lib/api";
+import { formatSecs } from "@/lib/api";
+import { useAssetStore } from "@/store/useAssetStore";
 
 const TH: React.CSSProperties = { fontSize: "11px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, padding: "12px 20px", textAlign: "left", whiteSpace: "nowrap" };
 const TD: React.CSSProperties = { fontSize: "13px", color: "#d4d4d8", padding: "14px 20px", whiteSpace: "nowrap" };
@@ -34,9 +35,11 @@ function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
   const [env, setEnv]         = useState("production");
   const [owner, setOwner]     = useState("");
 
+  const { upload } = useAssetStore();
+
   const handleFile = async (file: File) => {
     setError(null); setLoading(true);
-    try { await uploadExcel(file, scanName || file.name); onSuccess(); onClose(); }
+    try { await upload(file, scanName || file.name); onSuccess(); onClose(); }
     catch { setError("Upload failed. Check the file format and backend."); }
     finally { setLoading(false); }
   };
@@ -45,12 +48,10 @@ function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
     if (!ip.trim()) { setError("IP address is required."); return; }
     setError(null); setLoading(true);
     try {
-      const fd = new FormData();
-      // Create a tiny CSV in memory and upload it
       const csv = `asset_ip,asset_role,data_classification,environment,owner_email\n${ip},${role},${dc},${env},${owner}`;
       const blob = new Blob([csv], { type: "text/csv" });
       const file = new File([blob], "manual.csv", { type: "text/csv" });
-      await uploadExcel(file, scanName || ip);
+      await upload(file, scanName || ip);
       onSuccess(); onClose();
     } catch { setError("Failed to create scan."); }
     finally { setLoading(false); }
@@ -146,21 +147,14 @@ function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
 
 export default function AssetScanningPage() {
   const router = useRouter();
-  const [scans, setScans]         = useState<ScanSession[]>([]);
-  const [loading, setLoading]     = useState(true);
+  const { scans, loading, deleting, fetchScans, remove } = useAssetStore();
   const [showModal, setShowModal] = useState(false);
   const [hovered, setHovered]     = useState<string | null>(null);
-  const [deleting, setDeleting]   = useState<string | null>(null);
-
-  const fetchScans = async () => {
-    try { setScans(await listScans()); } finally { setLoading(false); }
-  };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm("Delete this scan and all its assets?")) return;
-    setDeleting(id);
-    try { await deleteScan(id); await fetchScans(); } finally { setDeleting(null); }
+    await remove(id);
   };
 
   useEffect(() => { fetchScans(); }, []);
