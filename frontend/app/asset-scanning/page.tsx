@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { listScans, uploadExcel, deleteScan, duration, type ScanSession } from "@/lib/api";
+import { listScans, uploadExcel, deleteScan, formatSecs, type ScanSession } from "@/lib/api";
 
 const TH: React.CSSProperties = { fontSize: "11px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, padding: "12px 20px", textAlign: "left", whiteSpace: "nowrap" };
 const TD: React.CSSProperties = { fontSize: "13px", color: "#d4d4d8", padding: "14px 20px", whiteSpace: "nowrap" };
@@ -230,7 +230,7 @@ export default function AssetScanningPage() {
                     <td style={{ ...TD, color: "white", fontWeight: 600 }}>{scan.scan_name || scan.filename || "—"}</td>
                     <td style={{ ...TD, color: "#71717a", fontSize: "12px" }}>{scan.filename || "—"}</td>
                     <td style={TD}>{scan.total_assets}</td>
-                    <td style={{ ...TD, fontFamily: "monospace", color: "#71717a" }}>{duration(scan.created_at, scan.completed_at)}</td>
+                    <td style={{ ...TD, fontFamily: "monospace", color: "#71717a" }}>{formatSecs(scan.total_asset_secs)}</td>
                     <td style={TD}><Badge status={scan.status} /></td>
                     <td style={{ ...TD, color: "#71717a" }}>{new Date(scan.created_at).toLocaleString()}</td>
                     <td style={{ padding: "14px 20px", whiteSpace: "nowrap" }}>

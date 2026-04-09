@@ -56,9 +56,14 @@ export async function addExcelAssets(scanId: string, file: File): Promise<void> 
 export function duration(start: string | null, end: string | null): string {
   if (!start || !end) return "—";
   const secs = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
+  return formatSecs(secs);
+}
+
+export function formatSecs(secs: number): string {
+  if (!secs) return "—";
   if (secs < 60) return `${secs}s`;
   const m = Math.floor(secs / 60), s = secs % 60;
-  return `${m}m ${s}s`;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
 export function createWebSocket(jobId: string): WebSocket {
@@ -81,6 +86,7 @@ export type ScanSession = {
   filename: string;
   scan_name: string | null;
   total_assets: number;
+  total_asset_secs: number;
   status: "processing" | "done" | "error";
   created_at: string;
   completed_at: string | null;

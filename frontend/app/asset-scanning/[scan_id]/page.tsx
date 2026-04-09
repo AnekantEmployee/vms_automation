@@ -196,11 +196,6 @@ export default function ScanDetailPage() {
           <h1 style={{ fontSize: "22px", fontWeight: 700, color: "white", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{scan.filename || "Scan"}</h1>
           <p style={{ fontSize: "12px", color: "#71717a", marginTop: "4px", marginBottom: 0 }}>
             {new Date(scan.created_at).toLocaleString()}
-            {scan.completed_at && (
-              <span style={{ marginLeft: "12px", color: "#52525b" }}>
-                · Duration: <span style={{ fontFamily: "monospace", color: "#a1a1aa" }}>{duration(scan.created_at, scan.completed_at)}</span>
-              </span>
-            )}
           </p>
         </div>
         <Badge status={scan.status} />
