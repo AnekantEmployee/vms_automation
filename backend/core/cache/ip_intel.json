@@ -32,5 +32,22 @@
       "shodan_vulns": [],
       "threat_intel_summary": "AbuseIPDB confidence score: 0% (1 reports)."
     }
+  },
+  "20.106.29.135": {
+    "cached_at": "2026-04-09T06:07:28.658408+00:00",
+    "value": {
+      "internet_facing": false,
+      "asn": "AS8075",
+      "org": "Microsoft Corporation",
+      "country": "US",
+      "hosting_provider": "AS8075 Microsoft Corporation",
+      "abuse_confidence": 0,
+      "abuse_reports": 0,
+      "is_known_scanner": false,
+      "greynoise_classification": "unknown",
+      "shodan_ports": [],
+      "shodan_vulns": [],
+      "threat_intel_summary": "AbuseIPDB confidence score: 0% (0 reports)."
+    }
   }
 }
