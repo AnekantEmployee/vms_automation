@@ -37,6 +37,19 @@ def _read_df(file_bytes: bytes, filename: str) -> pd.DataFrame:
     return df
 
 
+def _clean(val, default: str = "") -> str:
+    """Convert a pandas cell to string, treating NaN/None as default."""
+    if val is None:
+        return default
+    try:
+        import math
+        if math.isnan(float(val)):
+            return default
+    except (TypeError, ValueError):
+        pass
+    return str(val).strip() or default
+
+
 async def process_excel(job_id: str, file_bytes: bytes, filename: str = "") -> str:
     """
     1. Parse Excel
@@ -57,11 +70,11 @@ async def process_excel(job_id: str, file_bytes: bytes, filename: str = "") -> s
     for idx, row in df.iterrows():
         rows_payload.append({
             "row_index":           int(idx),
-            "ip":                  str(row.get("ip", "")).strip(),
-            "declared_role":       str(row.get("declared_role", "Unknown / Let AI infer")).strip(),
-            "data_classification": str(row.get("data_classification", "internal")).strip(),
-            "environment":         str(row.get("environment", "production")).strip(),
-            "owner":               str(row.get("owner", "unknown")).strip(),
+            "ip":                  _clean(row.get("ip"), ""),
+            "declared_role":       _clean(row.get("declared_role"), "Unknown / Let AI infer"),
+            "data_classification": _clean(row.get("data_classification"), "internal"),
+            "environment":         _clean(row.get("environment"), "production"),
+            "owner":               _clean(row.get("owner"), "unknown"),
         })
 
     # 3. Insert all rows as pending

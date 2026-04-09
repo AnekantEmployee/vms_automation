@@ -144,7 +144,14 @@ export default function ScanDetailPage() {
                   <td style={{ padding: "14px 20px", fontSize: "13px", color: "#a1a1aa" }}>{asset.declared_role || "—"}</td>
                   <td style={{ padding: "14px 20px", fontSize: "13px", color: "#71717a" }}>{asset.environment}</td>
                   <td style={{ padding: "14px 20px" }}>
-                    {score !== undefined ? <ScoreBar score={score} /> : <span style={{ color: "#3f3f46", fontSize: "12px" }}>—</span>}
+                    {score !== undefined ? <ScoreBar score={score} /> : (
+                      asset.status === "pending"
+                        ? <span style={{ fontSize: "11px", color: "#fbbf24", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#fbbf24", display: "inline-block", animation: "pulse 1.5s infinite" }} />
+                            Scanning...
+                          </span>
+                        : <span style={{ color: "#3f3f46", fontSize: "12px" }}>—</span>
+                    )}
                   </td>
                   <td style={{ padding: "14px 20px" }}>{badge(asset.status)}</td>
                   <td style={{ padding: "14px 20px", textAlign: "right" }}>
