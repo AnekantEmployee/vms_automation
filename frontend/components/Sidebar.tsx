@@ -20,19 +20,29 @@ export default function Sidebar() {
   const path = usePathname();
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <aside style={{
+      width: "220px",
+      minWidth: "220px",
+      height: "100vh",
+      background: "#0d0d14",
+      borderRight: "1px solid #1f1f2e",
+      display: "flex",
+      flexDirection: "column",
+      flexShrink: 0,
+      overflow: "hidden",
+    }}>
       {/* Logo */}
-      <div style={{ padding: "24px 20px", borderBottom: "1px solid #1f1f2e" }}>
-        <div style={{ fontSize: "20px", fontWeight: 800, color: "white", letterSpacing: "-0.5px" }}>
+      <div style={{ padding: "22px 20px 18px", borderBottom: "1px solid #1f1f2e", flexShrink: 0 }}>
+        <div style={{ fontSize: "20px", fontWeight: 800, color: "white", letterSpacing: "-0.5px", whiteSpace: "nowrap" }}>
           V<span style={{ color: "#00ff9d" }}>MS</span>
         </div>
-        <div style={{ fontSize: "11px", color: "#52525b", marginTop: "2px" }}>
+        <div style={{ fontSize: "11px", color: "#52525b", marginTop: "3px", whiteSpace: "nowrap" }}>
           Vulnerability Management
         </div>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: "12px 10px" }}>
+      <nav style={{ flex: 1, padding: "10px 8px", overflowY: "auto" }}>
         {NAV.map((item) => {
           const active = path.startsWith(item.href);
           return (
@@ -52,19 +62,21 @@ export default function Sidebar() {
                 background: active ? "rgba(0,255,157,0.07)" : "transparent",
                 border: active ? "1px solid rgba(0,255,157,0.15)" : "1px solid transparent",
                 transition: "all 0.15s",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
               }}
             >
-              {item.icon}
-              {item.label}
+              <span style={{ flexShrink: 0 }}>{item.icon}</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{item.label}</span>
             </Link>
           );
         })}
       </nav>
 
       {/* Footer */}
-      <div style={{ padding: "16px 20px", borderTop: "1px solid #1f1f2e" }}>
-        <span style={{ fontSize: "11px", color: "#3f3f46" }}>VMS v1.0</span>
+      <div style={{ padding: "14px 20px", borderTop: "1px solid #1f1f2e", flexShrink: 0 }}>
+        <span style={{ fontSize: "11px", color: "#3f3f46", whiteSpace: "nowrap" }}>VMS v1.0</span>
       </div>
-    </div>
+    </aside>
   );
 }

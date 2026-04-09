@@ -2,113 +2,63 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { listScans, uploadExcel, type ScanSession } from "@/lib/api";
+import { listScans, uploadExcel, deleteScan, duration, type ScanSession } from "@/lib/api";
 
-const S = {
-  page:        { padding: "40px 48px", maxWidth: "1200px" } as React.CSSProperties,
-  header:      { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "32px" } as React.CSSProperties,
-  h1:          { fontSize: "24px", fontWeight: 700, color: "white", margin: 0 } as React.CSSProperties,
-  sub:         { fontSize: "13px", color: "#71717a", marginTop: "4px" } as React.CSSProperties,
-  btn:         { display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: "#00ff9d", color: "#000", fontSize: "13px", fontWeight: 700, borderRadius: "8px", border: "none", cursor: "pointer" } as React.CSSProperties,
-  statsGrid:   { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "32px" } as React.CSSProperties,
-  card:        { background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "12px", padding: "20px 24px" } as React.CSSProperties,
-  cardLabel:   { fontSize: "11px", color: "#71717a", textTransform: "uppercase" as const, letterSpacing: "0.05em", marginBottom: "8px" } as React.CSSProperties,
-  cardValue:   { fontSize: "28px", fontWeight: 700, color: "white" } as React.CSSProperties,
-  table:       { background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "12px", overflow: "hidden" } as React.CSSProperties,
-  tableHead:   { padding: "14px 24px", borderBottom: "1px solid #1f1f2e", display: "flex", alignItems: "center", justifyContent: "space-between" } as React.CSSProperties,
-  th:          { fontSize: "11px", color: "#52525b", textTransform: "uppercase" as const, letterSpacing: "0.06em", fontWeight: 600 } as React.CSSProperties,
-  tr:          { display: "grid", gridTemplateColumns: "2fr 80px 100px 160px 40px", alignItems: "center", padding: "0 24px", borderBottom: "1px solid #18181f", cursor: "pointer", transition: "background 0.15s" } as React.CSSProperties,
-  td:          { padding: "14px 0", fontSize: "13px", color: "#d4d4d8" } as React.CSSProperties,
-  empty:       { padding: "64px 24px", textAlign: "center" as const, color: "#52525b", fontSize: "13px" } as React.CSSProperties,
-};
+const th: React.CSSProperties = { fontSize: "11px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, padding: "12px 20px", textAlign: "left" };
+const td: React.CSSProperties = { fontSize: "13px", color: "#d4d4d8", padding: "14px 20px" };
 
-function badge(status: string) {
-  const map: Record<string, { bg: string; color: string; border: string }> = {
-    done:       { bg: "rgba(16,185,129,0.1)", color: "#34d399", border: "rgba(16,185,129,0.2)" },
-    processing: { bg: "rgba(245,158,11,0.1)", color: "#fbbf24", border: "rgba(245,158,11,0.2)" },
-    error:      { bg: "rgba(239,68,68,0.1)",  color: "#f87171", border: "rgba(239,68,68,0.2)" },
+function Badge({ status }: { status: string }) {
+  const map: Record<string, [string, string, string]> = {
+    done:       ["rgba(16,185,129,0.1)",  "#34d399", "rgba(16,185,129,0.2)"],
+    processing: ["rgba(245,158,11,0.1)",  "#fbbf24", "rgba(245,158,11,0.2)"],
+    error:      ["rgba(239,68,68,0.1)",   "#f87171", "rgba(239,68,68,0.2)"],
   };
-  const c = map[status] ?? map.processing;
-  return (
-    <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: c.bg, color: c.color, border: `1px solid ${c.border}`, fontWeight: 600 }}>
-      {status}
-    </span>
-  );
+  const [bg, color, border] = map[status] ?? map.processing;
+  return <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: bg, color, border: `1px solid ${border}`, fontWeight: 600 }}>{status}</span>;
 }
 
 function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
 
   const handleFile = async (file: File) => {
-    setError(null);
-    setLoading(true);
-    try {
-      await uploadExcel(file);
-      onSuccess();
-      onClose();
-    } catch {
-      setError("Upload failed. Check the file format and backend.");
-    } finally {
-      setLoading(false);
-    }
+    setError(null); setLoading(true);
+    try { await uploadExcel(file); onSuccess(); onClose(); }
+    catch { setError("Upload failed. Check the file format and backend."); }
+    finally { setLoading(false); }
   };
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}>
-      <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "16px", padding: "32px", width: "100%", maxWidth: "460px", boxShadow: "0 25px 60px rgba(0,0,0,0.5)" }}>
-        {/* Header */}
+      <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "16px", padding: "32px", width: "100%", maxWidth: "460px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
           <span style={{ fontSize: "16px", fontWeight: 700, color: "white" }}>New Asset Scan</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#71717a", cursor: "pointer", padding: "4px" }}>
-            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#71717a", cursor: "pointer" }}>
+            <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
-
         <p style={{ fontSize: "12px", color: "#71717a", marginBottom: "20px", lineHeight: 1.6 }}>
           Upload an Excel file with columns:<br />
           <code style={{ color: "#00ff9d", fontSize: "11px" }}>asset_ip, asset_role, data_classification, environment, owner_email</code>
         </p>
-
-        {/* Drop zone */}
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
           onClick={() => inputRef.current?.click()}
-          style={{
-            border: `2px dashed ${dragging ? "#00ff9d" : "#2a2a3a"}`,
-            borderRadius: "12px",
-            padding: "40px 24px",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            cursor: "pointer",
-            background: dragging ? "rgba(0,255,157,0.04)" : "transparent",
-            transition: "all 0.2s",
-          }}
+          style={{ border: `2px dashed ${dragging ? "#00ff9d" : "#2a2a3a"}`, borderRadius: "12px", padding: "40px 24px", display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer", background: dragging ? "rgba(0,255,157,0.04)" : "transparent", transition: "all 0.2s" }}
         >
-          <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }}
-            onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
+          <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
           <svg width="32" height="32" fill="none" stroke={dragging ? "#00ff9d" : "#52525b"} viewBox="0 0 24 24" style={{ marginBottom: "12px" }}>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
-          <p style={{ fontSize: "13px", color: dragging ? "#00ff9d" : "#a1a1aa", fontWeight: 500 }}>
-            {dragging ? "Drop it!" : "Drop file or click to browse"}
-          </p>
+          <p style={{ fontSize: "13px", color: dragging ? "#00ff9d" : "#a1a1aa", fontWeight: 500 }}>{dragging ? "Drop it!" : "Drop file or click to browse"}</p>
           <p style={{ fontSize: "11px", color: "#52525b", marginTop: "4px" }}>.xlsx, .xls, .csv</p>
           {loading && <p style={{ fontSize: "12px", color: "#00ff9d", marginTop: "12px" }}>Uploading...</p>}
         </div>
-
-        {error && (
-          <div style={{ marginTop: "12px", padding: "10px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "8px", fontSize: "12px", color: "#f87171" }}>
-            {error}
-          </div>
-        )}
+        {error && <div style={{ marginTop: "12px", padding: "10px 14px", background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: "8px", fontSize: "12px", color: "#f87171" }}>{error}</div>}
       </div>
     </div>
   );
@@ -120,9 +70,17 @@ export default function AssetScanningPage() {
   const [loading, setLoading]     = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [hovered, setHovered]     = useState<string | null>(null);
+  const [deleting, setDeleting]   = useState<string | null>(null);
 
   const fetchScans = async () => {
     try { setScans(await listScans()); } finally { setLoading(false); }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm("Delete this scan and all its assets?")) return;
+    setDeleting(id);
+    try { await deleteScan(id); await fetchScans(); } finally { setDeleting(null); }
   };
 
   useEffect(() => { fetchScans(); }, []);
@@ -134,53 +92,55 @@ export default function AssetScanningPage() {
   }, [scans]);
 
   return (
-    <div style={S.page}>
+    <div style={{ padding: "36px 40px", width: "100%", boxSizing: "border-box" }}>
       {showModal && <NewScanModal onClose={() => setShowModal(false)} onSuccess={fetchScans} />}
 
       {/* Header */}
-      <div style={S.header}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "32px" }}>
         <div>
-          <h1 style={S.h1}>Asset Scanning</h1>
-          <p style={S.sub}>Upload and analyse asset lists</p>
+          <h1 style={{ fontSize: "24px", fontWeight: 700, color: "white", margin: 0 }}>Asset Scanning</h1>
+          <p style={{ fontSize: "13px", color: "#71717a", marginTop: "4px" }}>Upload and analyse asset lists</p>
         </div>
-        <button style={S.btn} onClick={() => setShowModal(true)}>
-          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-          </svg>
+        <button
+          onClick={() => setShowModal(true)}
+          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: "#00ff9d", color: "#000", fontSize: "13px", fontWeight: 700, borderRadius: "8px", border: "none", cursor: "pointer" }}
+        >
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
           New Scan
         </button>
       </div>
 
       {/* Stats */}
-      <div style={S.statsGrid}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "32px" }}>
         {[
           { label: "Total Scans",  value: scans.length },
           { label: "Completed",    value: scans.filter((s) => s.status === "done").length },
           { label: "Total Assets", value: scans.reduce((a, s) => a + (s.total_assets ?? 0), 0) },
         ].map((stat) => (
-          <div key={stat.label} style={S.card}>
-            <div style={S.cardLabel}>{stat.label}</div>
-            <div style={S.cardValue}>{stat.value}</div>
+          <div key={stat.label} style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "12px", padding: "20px 24px" }}>
+            <div style={{ fontSize: "11px", color: "#71717a", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px" }}>{stat.label}</div>
+            <div style={{ fontSize: "28px", fontWeight: 700, color: "white" }}>{stat.value}</div>
           </div>
         ))}
       </div>
 
       {/* Table */}
-      <div style={S.table}>
-        <div style={S.tableHead}>
+      <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "12px", overflow: "hidden" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #1f1f2e" }}>
           <span style={{ fontSize: "13px", fontWeight: 600, color: "white" }}>Scan History</span>
         </div>
-
         {loading ? (
-          <div style={S.empty}>Loading...</div>
+          <div style={{ padding: "64px 24px", textAlign: "center", color: "#52525b", fontSize: "13px" }}>Loading...</div>
         ) : scans.length === 0 ? (
-          <div style={S.empty}>No scans yet. Click <span style={{ color: "#00ff9d" }}>New Scan</span> to get started.</div>
+          <div style={{ padding: "64px 24px", textAlign: "center", color: "#52525b", fontSize: "13px" }}>
+            No scans yet. Click <span style={{ color: "#00ff9d" }}>New Scan</span> to get started.
+          </div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1f1f2e" }}>
-                {["Filename", "Assets", "Status", "Date", ""].map((h) => (
-                  <th key={h} style={{ ...S.th, padding: "12px 24px", textAlign: "left" as const }}>{h}</th>
+                {["Filename", "Assets", "Duration", "Status", "Started", ""].map((h) => (
+                  <th key={h} style={th}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -193,14 +153,27 @@ export default function AssetScanningPage() {
                   onMouseLeave={() => setHovered(null)}
                   style={{ borderBottom: "1px solid #18181f", cursor: "pointer", background: hovered === scan.id ? "#111118" : "transparent", transition: "background 0.15s" }}
                 >
-                  <td style={{ ...S.td, padding: "14px 24px", color: "white", fontWeight: 500 }}>{scan.filename || "—"}</td>
-                  <td style={{ ...S.td, padding: "14px 24px" }}>{scan.total_assets}</td>
-                  <td style={{ ...S.td, padding: "14px 24px" }}>{badge(scan.status)}</td>
-                  <td style={{ ...S.td, padding: "14px 24px", color: "#71717a" }}>{new Date(scan.created_at).toLocaleString()}</td>
-                  <td style={{ padding: "14px 24px", textAlign: "right" as const }}>
-                    <svg width="14" height="14" fill="none" stroke="#52525b" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                  <td style={{ ...td, color: "white", fontWeight: 500 }}>{scan.filename || "—"}</td>
+                  <td style={td}>{scan.total_assets}</td>
+                  <td style={{ ...td, fontFamily: "monospace", color: "#71717a" }}>{duration(scan.created_at, scan.completed_at)}</td>
+                  <td style={td}><Badge status={scan.status} /></td>
+                  <td style={{ ...td, color: "#71717a" }}>{new Date(scan.created_at).toLocaleString()}</td>
+                  <td style={{ padding: "14px 20px", textAlign: "right" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "12px" }}>
+                      <button
+                        onClick={(e) => handleDelete(e, scan.id)}
+                        disabled={deleting === scan.id}
+                        title="Delete scan"
+                        style={{ background: "none", border: "none", cursor: "pointer", color: deleting === scan.id ? "#3f3f46" : "#52525b", padding: "4px", lineHeight: 0 }}
+                      >
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                      <svg width="14" height="14" fill="none" stroke="#52525b" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -16,7 +16,16 @@ def create_scan_session(filename: str, total_assets: int) -> dict:
 
 def update_scan_session_status(scan_id: str, status: str) -> None:
     db = get_db()
-    db.table("asset_scanning").update({"status": status}).eq("id", scan_id).execute()
+    update = {"status": status}
+    if status == "done":
+        update["completed_at"] = datetime.now(timezone.utc).isoformat()
+    db.table("asset_scanning").update(update).eq("id", scan_id).execute()
+
+
+def delete_scan_session(scan_id: str) -> None:
+    db = get_db()
+    db.table("asset_scan_rows").delete().eq("scan_id", scan_id).execute()
+    db.table("asset_scanning").delete().eq("id", scan_id).execute()
 
 
 def get_all_scan_sessions() -> list[dict]:
@@ -34,7 +43,6 @@ def get_scan_session(scan_id: str) -> dict | None:
 # ── asset_scan_rows (individual assets) ───────────────────────────────────────
 
 def create_scan_rows(scan_id: str, rows: list[dict]) -> list[dict]:
-    """Insert all asset rows for a scan session at once."""
     db = get_db()
     payload = [
         {
@@ -46,6 +54,7 @@ def create_scan_rows(scan_id: str, rows: list[dict]) -> list[dict]:
             "environment":         r.get("environment", "production"),
             "owner":               r.get("owner", "unknown"),
             "status":              "pending",
+            "started_at":          datetime.now(timezone.utc).isoformat(),
         }
         for r in rows
     ]
@@ -65,9 +74,15 @@ def update_scan_row_result(row_id: str, result: dict) -> None:
 def update_scan_row_error(row_id: str, error: str) -> None:
     db = get_db()
     db.table("asset_scan_rows").update({
-        "status": "error",
-        "result": {"error": error},
+        "status":     "error",
+        "result":     {"error": error},
+        "scanned_at": datetime.now(timezone.utc).isoformat(),
     }).eq("id", row_id).execute()
+
+
+def delete_scan_row(row_id: str) -> None:
+    db = get_db()
+    db.table("asset_scan_rows").delete().eq("id", row_id).execute()
 
 
 def get_scan_rows(scan_id: str) -> list[dict]:
