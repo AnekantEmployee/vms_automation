@@ -43,6 +43,8 @@ export function duration(start: string | null, end: string | null): string {
   const m = Math.floor(secs / 60), s = secs % 60;
   return `${m}m ${s}s`;
 }
+
+export function createWebSocket(jobId: string): WebSocket {
   const WS = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8001";
   return new WebSocket(`${WS}/ws/${jobId}`);
 }
