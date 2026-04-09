@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from backend.db.client import get_db
+import json
 
 
 # ── asset_scanning ─────────────────────────────────────────────────────────────
@@ -119,3 +120,42 @@ def get_scan_row(row_id: str) -> dict | None:
     db = get_db()
     res = db.table("asset_scan_rows").select("*").eq("id", row_id).execute()
     return res.data[0] if res.data else None
+
+
+# ── cve_exploitability ─────────────────────────────────────────────────────────
+
+def upsert_cve_exploitability(cve_id: str, result: dict) -> dict:
+    db = get_db()
+    payload = {
+        "cve_id":      cve_id.upper(),
+        "result":      result,
+        "analysed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = (
+        db.table("cve_exploitability")
+        .upsert(payload, on_conflict="cve_id")
+        .execute()
+    )
+    return res.data[0]
+
+
+def get_cve_exploitability(cve_id: str) -> dict | None:
+    db = get_db()
+    res = db.table("cve_exploitability").select("*").eq("cve_id", cve_id.upper()).execute()
+    return res.data[0] if res.data else None
+
+
+def list_cve_exploitability() -> list[dict]:
+    db = get_db()
+    res = (
+        db.table("cve_exploitability")
+        .select("id, cve_id, analysed_at, result")
+        .order("analysed_at", desc=True)
+        .execute()
+    )
+    return res.data
+
+
+def delete_cve_exploitability(cve_id: str) -> None:
+    db = get_db()
+    db.table("cve_exploitability").delete().eq("cve_id", cve_id.upper()).execute()

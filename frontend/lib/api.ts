@@ -53,6 +53,32 @@ export async function addExcelAssets(scanId: string, file: File): Promise<void> 
   if (!res.ok) throw new Error("Failed to add assets from file");
 }
 
+// ── CVE Exploitability ────────────────────────────────────────────────────────
+
+export async function listExploits(): Promise<ExploitRecord[]> {
+  const res = await fetch(`${BASE}/api/exploits`);
+  if (!res.ok) throw new Error("Failed to fetch exploits");
+  return res.json();
+}
+
+export async function analyseExploit(cveId: string, forceRefresh = false): Promise<ExploitResult> {
+  const url = `${BASE}/api/exploit?cve_id=${encodeURIComponent(cveId)}&force_refresh=${forceRefresh}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to analyse CVE");
+  return res.json();
+}
+
+export async function getExploit(cveId: string): Promise<ExploitRecord> {
+  const res = await fetch(`${BASE}/api/exploits/${encodeURIComponent(cveId)}`);
+  if (!res.ok) throw new Error("CVE not found");
+  return res.json();
+}
+
+export async function deleteExploit(cveId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/exploits/${encodeURIComponent(cveId)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete CVE record");
+}
+
 export function duration(start: string | null, end: string | null): string {
   if (!start || !end) return "—";
   const secs = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
@@ -108,3 +134,59 @@ export type AssetRow = {
 };
 
 export type ScanDetail = ScanSession & { assets: AssetRow[] };
+
+// ── CVE Exploitability types ────────────────────────────────────────────────────
+
+export type UniqueExploit = {
+  name: string;
+  url: string;
+  source: string;
+  reliability: number;
+  weaponization: number;
+  skill_required: number;
+  exploit_type: string;
+  notes: string;
+};
+
+export type ExploitResult = {
+  cve_id: string;
+  analysed_at: string;
+  description?: string;
+  cvss_v3_score?: number;
+  cvss_v3_vector?: string;
+  cvss_v2_score?: number;
+  severity?: string;
+  cwe?: string[];
+  affected_products?: string[];
+  references?: string[];
+  published?: string;
+  raw_exploit_count: number;
+  sources_searched: string[];
+  raw_exploits_by_source: Record<string, number>;
+  exploit_count?: number;
+  unique_exploits?: UniqueExploit[];
+  most_dangerous_url?: string;
+  most_dangerous_notes?: string;
+  has_metasploit?: boolean;
+  has_full_exploit?: boolean;
+  analysis_notes?: string;
+  exploitability_score?: number;
+  exploitability_tier?: string;
+  tier_label?: string;
+  epss_estimate?: number;
+  attacker_profile?: string;
+  attack_complexity?: string;
+  exploit_maturity?: string;
+  in_the_wild?: boolean;
+  patch_priority?: string;
+  mitigations?: string[];
+  executive_summary?: string;
+  [key: string]: unknown;
+};
+
+export type ExploitRecord = {
+  id: string;
+  cve_id: string;
+  analysed_at: string;
+  result: ExploitResult;
+};
