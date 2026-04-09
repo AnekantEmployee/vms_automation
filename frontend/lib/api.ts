@@ -1,8 +1,9 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
-export async function uploadExcel(file: File): Promise<{ job_id: string; filename: string }> {
+export async function uploadExcel(file: File, scanName?: string): Promise<{ job_id: string; filename: string }> {
   const fd = new FormData();
   fd.append("file", file);
+  if (scanName) fd.append("scan_name", scanName);
   const res = await fetch(`${BASE}/api/upload`, { method: "POST", body: fd });
   if (!res.ok) throw new Error("Upload failed");
   return res.json();
@@ -26,7 +27,30 @@ export async function getAssetDetail(scanId: string, rowId: string): Promise<Ass
   return res.json();
 }
 
-export async function deleteScan(scanId: string): Promise<void> {
+export async function addManualAssets(scanId: string, assets: ManualAsset[]): Promise<void> {
+  const res = await fetch(`${BASE}/api/scans/${scanId}/add/manual`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(assets),
+  });
+  if (!res.ok) throw new Error("Failed to add assets");
+}
+
+export async function addExcelAssets(scanId: string, file: File): Promise<void> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(`${BASE}/api/scans/${scanId}/add/excel`, { method: "POST", body: fd });
+  if (!res.ok) throw new Error("Failed to add assets from file");
+}
+
+export type ManualAsset = {
+  ip: string;
+  declared_role?: string;
+  data_classification?: string;
+  environment?: string;
+  owner?: string;
+};
+
   const res = await fetch(`${BASE}/api/scans/${scanId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete scan");
 }
@@ -54,6 +78,7 @@ export function createWebSocket(jobId: string): WebSocket {
 export type ScanSession = {
   id: string;
   filename: string;
+  scan_name: string | null;
   total_assets: number;
   status: "processing" | "done" | "error";
   created_at: string;

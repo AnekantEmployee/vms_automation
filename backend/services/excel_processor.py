@@ -50,7 +50,7 @@ def _clean(val, default: str = "") -> str:
     return str(val).strip() or default
 
 
-async def process_excel(job_id: str, file_bytes: bytes, filename: str = "") -> str:
+async def process_excel(job_id: str, file_bytes: bytes, filename: str = "", scan_name: str = "") -> str:
     """
     1. Parse Excel
     2. Create scan session in DB
@@ -62,7 +62,7 @@ async def process_excel(job_id: str, file_bytes: bytes, filename: str = "") -> s
     total = len(df)
 
     # 1. Create scan session
-    session = create_scan_session(filename=filename, total_assets=total)
+    session = create_scan_session(filename=filename, total_assets=total, scan_name=scan_name)
     scan_id = session["id"]
 
     # 2. Build row payloads
