@@ -16,7 +16,24 @@ router = APIRouter()
 
 @router.get("/scans")
 def list_scans():
-    return get_all_scan_sessions()
+    sessions = get_all_scan_sessions()
+    # Compute total asset duration (sum of started_at -> scanned_at for each row)
+    for session in sessions:
+        rows = get_scan_rows(session["id"])
+        total_secs = 0
+        for r in rows:
+            if r.get("started_at") and r.get("scanned_at"):
+                try:
+                    from datetime import datetime, timezone
+                    start = datetime.fromisoformat(r["started_at"])
+                    end   = datetime.fromisoformat(r["scanned_at"])
+                    if start.tzinfo is None: start = start.replace(tzinfo=timezone.utc)
+                    if end.tzinfo is None:   end   = end.replace(tzinfo=timezone.utc)
+                    total_secs += max(0, int((end - start).total_seconds()))
+                except Exception:
+                    pass
+        session["total_asset_secs"] = total_secs
+    return sessions
 
 
 @router.get("/scans/{scan_id}")

@@ -248,7 +248,7 @@ export default function ScanDetailPage() {
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "780px" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1f1f2e" }}>
-                {["#", "IP Address", "Role", "Environment", "Risk Score", "Status", ""].map((h) => (
+                {["#", "IP Address", "Role", "Environment", "Time Taken", "Risk Score", "Status", ""].map((h) => (
                   <th key={h} style={TH}>{h}</th>
                 ))}
               </tr>
@@ -269,6 +269,9 @@ export default function ScanDetailPage() {
                     <td style={{ ...TD, color: "white", fontFamily: "monospace", fontWeight: 500 }}>{asset.ip}</td>
                     <td style={{ ...TD, color: "#a1a1aa", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis" }}>{asset.declared_role || "—"}</td>
                     <td style={{ ...TD, color: "#71717a" }}>{asset.environment}</td>
+                    <td style={{ ...TD, fontFamily: "monospace", color: "#71717a", fontSize: "12px" }}>
+                      {asset.status === "done" ? duration(asset.started_at, asset.scanned_at) : asset.status === "pending" ? <Scanning /> : "—"}
+                    </td>
                     <td style={TD}>
                       {score !== undefined ? <ScoreBar score={score} /> : asset.status === "pending" ? <Scanning /> : <span style={{ color: "#3f3f46" }}>—</span>}
                     </td>
