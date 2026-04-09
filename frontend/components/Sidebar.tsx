@@ -5,6 +5,16 @@ import { usePathname } from "next/navigation";
 
 const NAV = [
   {
+    label: "Dashboard",
+    href: "/dashboard",
+    icon: (
+      <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+          d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z" />
+      </svg>
+    ),
+  },
+  {
     label: "Asset Scanning",
     href: "/asset-scanning",
     icon: (
@@ -43,10 +53,10 @@ export default function Sidebar() {
     }}>
       {/* Logo */}
       <div style={{ padding: "22px 20px 18px", borderBottom: "1px solid #1f1f2e", flexShrink: 0 }}>
-        <div style={{ fontSize: "20px", fontWeight: 800, color: "white", letterSpacing: "-0.5px", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: "20px", fontWeight: 800, color: "white", letterSpacing: "-0.5px", whiteSpace: "nowrap", lineHeight: 1.3 }}>
           V<span style={{ color: "#00ff9d" }}>MS</span>
         </div>
-        <div style={{ fontSize: "11px", color: "#52525b", marginTop: "3px", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: "11px", color: "#52525b", marginTop: "3px", whiteSpace: "nowrap", lineHeight: 1.5 }}>
           Vulnerability Management
         </div>
       </div>
