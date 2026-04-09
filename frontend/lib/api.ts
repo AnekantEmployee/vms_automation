@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
 export async function uploadExcel(file: File): Promise<{ job_id: string; filename: string }> {
   const fd = new FormData();
@@ -27,7 +27,7 @@ export async function getAssetDetail(scanId: string, rowId: string): Promise<Ass
 }
 
 export function createWebSocket(jobId: string): WebSocket {
-  const WS = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
+  const WS = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8001";
   return new WebSocket(`${WS}/ws/${jobId}`);
 }
 
