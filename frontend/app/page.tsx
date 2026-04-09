@@ -1,5 +1,5 @@
-import FileUpload from "@/components/FileUpload";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return <FileUpload />;
+  redirect("/asset-scanning");
 }
