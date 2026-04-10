@@ -6,10 +6,10 @@ from backend.services.qualys_service import query_by_qids, debug_raw_xml, _kb_re
 from backend.services.qualys_processor import process_qualys_excel
 from backend.db.queries import (
     get_all_qualys_scans, get_qualys_scan, get_qualys_scan_rows,
-    get_qualys_scan_row, delete_qualys_scan,
+    get_qualys_scan_row, delete_qualys_scan, delete_qualys_scan_row,
 )
 
-router = APIRouter()
+router = APIRouter(tags=["Qualys"])
 
 
 @router.get("/qualys/kb")
@@ -76,6 +76,15 @@ def get_qualys_row_detail(scan_id: str, row_id: str):
     if not row or row.get("scan_id") != scan_id:
         raise HTTPException(status_code=404, detail="Row not found")
     return row
+
+
+@router.delete("/qualys/scans/{scan_id}/{row_id}")
+def remove_qualys_row(scan_id: str, row_id: str):
+    row = get_qualys_scan_row(row_id)
+    if not row or row.get("scan_id") != scan_id:
+        raise HTTPException(status_code=404, detail="Row not found")
+    delete_qualys_scan_row(row_id)
+    return {"deleted": row_id}
 
 
 @router.delete("/qualys/scans/{scan_id}")

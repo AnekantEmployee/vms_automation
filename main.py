@@ -8,7 +8,16 @@ from backend.routes.qualys  import router as qualys_router
 from backend.routes.scans   import router as scans_router
 import uvicorn
 
-app = FastAPI(title="VMS API")
+app = FastAPI(
+    title="VMS API",
+    openapi_tags=[
+        {"name": "Scans",   "description": "Asset scan sessions and rows"},
+        {"name": "Assets",  "description": "On-demand asset analysis"},
+        {"name": "Exploits","description": "CVE exploitability analysis"},
+        {"name": "Qualys",  "description": "Qualys KB and scan management"},
+        {"name": "Health",  "description": "Service health"},
+    ],
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,7 +34,7 @@ app.include_router(exploit_router, prefix="/api")
 app.include_router(qualys_router,  prefix="/api")
 app.include_router(scans_router,   prefix="/api")
 
-@app.get("/")
+@app.get("/", tags=["Health"])
 def health_check():
     return {"status": "ok"}
 

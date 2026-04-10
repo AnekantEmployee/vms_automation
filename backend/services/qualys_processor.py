@@ -3,6 +3,7 @@ import asyncio
 import pandas as pd
 from datetime import datetime, timezone
 from backend.db.client import get_db
+from backend.services.qualys_service import query_by_qids
 
 
 # ── Column map: Excel header → internal key ────────────────────────────────────
@@ -146,11 +147,28 @@ async def process_qualys_excel(job_id: str, file_bytes: bytes, filename: str = "
     db_rows = _create_qualys_rows(scan_id, rows_payload)
     row_id_map = {r["row_index"]: r["id"] for r in db_rows}
 
+    # ── Fetch KB data for all unique QIDs in one batch ─────────────────────────
+    unique_qids = list({
+        int(r["data"]["qid"])
+        for r in rows_payload
+        if r["data"].get("qid") and str(r["data"]["qid"]).isdigit()
+    })
+    kb_map: dict[str, dict] = {}
+    if unique_qids:
+        try:
+            kb_results = await asyncio.to_thread(query_by_qids, unique_qids)
+            kb_map = {str(kb["qid"]): kb for kb in kb_results if kb.get("qid")}
+        except Exception:
+            pass  # KB enrichment is best-effort; don't fail the whole scan
+
     async def _process_one(row_payload: dict):
         row_id = row_id_map[row_payload["row_index"]]
         try:
-            # For now: store the parsed key-value dict directly as result
-            _update_qualys_row_result(row_id, row_payload["data"])
+            result = dict(row_payload["data"])
+            kb = kb_map.get(str(result.get("qid", "")))
+            if kb:
+                result["kb"] = kb
+            _update_qualys_row_result(row_id, result)
         except Exception as e:
             _update_qualys_row_error(row_id, str(e))
 

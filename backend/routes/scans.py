@@ -1,15 +1,17 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional
+from fastapi import Query
 from backend.db.queries import (
     get_all_scan_sessions, get_scan_session, get_scan_rows, get_scan_row,
     delete_scan_session, delete_scan_row, add_assets_to_scan,
+    search_scan_rows_by_ip,
 )
 from backend.services.asset_service import run_asset_agent
 from backend.services.excel_processor import _read_df, _clean
 import asyncio
 
-router = APIRouter()
+router = APIRouter(tags=["Scans"])
 
 
 # ── Read ───────────────────────────────────────────────────────────────────────
@@ -34,6 +36,14 @@ def list_scans():
                     pass
         session["total_asset_secs"] = total_secs
     return sessions
+
+
+@router.get("/scans/search")
+def search_by_ip(ip: str = Query(..., description="IP address to search for")):
+    rows = search_scan_rows_by_ip(ip)
+    if not rows:
+        raise HTTPException(status_code=404, detail="No assets found for the given IP")
+    return rows
 
 
 @router.get("/scans/{scan_id}")

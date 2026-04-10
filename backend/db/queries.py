@@ -122,6 +122,12 @@ def get_scan_row(row_id: str) -> dict | None:
     return res.data[0] if res.data else None
 
 
+def search_scan_rows_by_ip(ip: str) -> list[dict]:
+    db = get_db()
+    res = db.table("asset_scan_rows").select("*").ilike("ip", f"%{ip}%").execute()
+    return res.data
+
+
 # ── cve_exploitability ─────────────────────────────────────────────────────────
 
 def upsert_cve_exploitability(cve_id: str, result: dict) -> dict:
@@ -191,6 +197,11 @@ def get_qualys_scan_row(row_id: str) -> dict | None:
     db = get_db()
     res = db.table("qualys_scan_rows").select("*").eq("id", row_id).execute()
     return res.data[0] if res.data else None
+
+
+def delete_qualys_scan_row(row_id: str) -> None:
+    db = get_db()
+    db.table("qualys_scan_rows").delete().eq("id", row_id).execute()
 
 
 def delete_qualys_scan(scan_id: str) -> None:

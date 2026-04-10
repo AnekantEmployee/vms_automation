@@ -3,7 +3,7 @@ from backend.services.excel_processor import process_excel
 from typing import Optional
 import uuid
 
-router = APIRouter()
+router = APIRouter(tags=["Scans"])
 
 
 @router.post("/upload")

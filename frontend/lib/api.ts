@@ -115,6 +115,18 @@ export async function getQualysScan(scanId: string): Promise<QualysScanDetail> {
   return res.json();
 }
 
+export async function searchByIp(ip: string): Promise<AssetRow[]> {
+  const res = await fetch(`${BASE}/api/scans/search?ip=${encodeURIComponent(ip)}`);
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error("Search failed");
+  return res.json();
+}
+
+export async function deleteQualysRow(scanId: string, rowId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/qualys/scans/${scanId}/${rowId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete row");
+}
+
 export async function deleteQualysScan(scanId: string): Promise<void> {
   const res = await fetch(`${BASE}/api/qualys/scans/${scanId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete qualys scan");
@@ -275,6 +287,37 @@ export type QualysRow = {
     trurisk_score: string;
     vulnerability_tags: string;
     results: string;
+    kb?: {
+      qid: string;
+      vuln_type: string;
+      severity: string;
+      title: string;
+      category: string;
+      sub_category: string;
+      published: string;
+      last_modified: string;
+      patchable: string;
+      patch_published: string;
+      cvss_base: string;
+      cvss_temporal: string;
+      cvss_vector: string;
+      cvss3_base: string;
+      cvss3_temporal: string;
+      cvss3_vector: string;
+      cvss3_attack_vector: string;
+      cve_ids: string[];
+      threat_intel: string;
+      affected_software: string[];
+      affected_products: string;
+      diagnosis: string;
+      consequence: string;
+      solution: string;
+      exploitability: string;
+      associated_malware: string;
+      discovery_remote: string;
+      discovery_auth: string;
+      compliance: { type: string; section: string; description: string }[];
+    };
   } | null;
   started_at: string | null;
   scanned_at: string | null;

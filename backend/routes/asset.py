@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query
 from asyncio import to_thread
 from backend.services.asset_service import run_asset_agent
 
-router = APIRouter()
+router = APIRouter(tags=["Assets"])
 
 
 @router.get("/asset")
