@@ -159,3 +159,41 @@ def list_cve_exploitability() -> list[dict]:
 def delete_cve_exploitability(cve_id: str) -> None:
     db = get_db()
     db.table("cve_exploitability").delete().eq("cve_id", cve_id.upper()).execute()
+
+
+# ── qualys_scans ───────────────────────────────────────────────────────────────
+
+def get_all_qualys_scans() -> list[dict]:
+    db = get_db()
+    res = db.table("qualys_scans").select("*").order("created_at", desc=True).execute()
+    return res.data
+
+
+def get_qualys_scan(scan_id: str) -> dict | None:
+    db = get_db()
+    res = db.table("qualys_scans").select("*").eq("id", scan_id).execute()
+    return res.data[0] if res.data else None
+
+
+def get_qualys_scan_rows(scan_id: str) -> list[dict]:
+    db = get_db()
+    res = (
+        db.table("qualys_scan_rows")
+        .select("*")
+        .eq("scan_id", scan_id)
+        .order("row_index")
+        .execute()
+    )
+    return res.data
+
+
+def get_qualys_scan_row(row_id: str) -> dict | None:
+    db = get_db()
+    res = db.table("qualys_scan_rows").select("*").eq("id", row_id).execute()
+    return res.data[0] if res.data else None
+
+
+def delete_qualys_scan(scan_id: str) -> None:
+    db = get_db()
+    db.table("qualys_scan_rows").delete().eq("scan_id", scan_id).execute()
+    db.table("qualys_scans").delete().eq("id", scan_id).execute()
