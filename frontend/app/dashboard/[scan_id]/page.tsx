@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useState, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { getQualysScan, duration, type QualysScanDetail } from "@/lib/api";
 
@@ -107,8 +107,8 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
                 const r = row.result;
                 const isExpanded = expanded === row.id;
                 return (
-                  <>
-                    <tr key={row.id}
+                  <Fragment key={row.id}>
+                    <tr
                       onClick={() => setExpanded(isExpanded ? null : row.id)}
                       onMouseEnter={() => setHovered(row.id)}
                       onMouseLeave={() => setHovered(null)}
@@ -123,7 +123,7 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
                       <td style={{ ...TD, color: "#71717a", fontSize: "12px" }}>{r?.last_detected || "—"}</td>
                     </tr>
                     {isExpanded && r && (
-                      <tr key={`${row.id}-exp`} style={{ borderBottom: "1px solid #18181f", background: "#111118" }}>
+                      <tr style={{ borderBottom: "1px solid #18181f", background: "#111118" }}>
                         <td colSpan={8} style={{ padding: "0 20px 20px" }}>
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", paddingTop: "16px" }}>
                             {[
@@ -167,7 +167,7 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

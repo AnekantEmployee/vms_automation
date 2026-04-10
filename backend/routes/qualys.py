@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, Bac
 from asyncio import to_thread
 from typing import Optional
 import uuid
-from backend.services.qualys_service import query_by_qids
+from backend.services.qualys_service import query_by_qids, debug_raw_xml, _kb_request
 from backend.services.qualys_processor import process_qualys_excel
 from backend.db.queries import (
     get_all_qualys_scans, get_qualys_scan, get_qualys_scan_rows,
@@ -17,6 +17,16 @@ async def qualys_kb(qids: list[int] = Query(...)):
     try:
         result = await to_thread(query_by_qids, qids)
         return result
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/qualys/kb/debug")
+async def qualys_kb_debug(qids: list[int] = Query(...)):
+    """Returns raw XML of first VULN — use to identify missing tag names."""
+    try:
+        root = await to_thread(_kb_request, {"ids": ",".join(str(q) for q in qids), "details": "All"})
+        return {"raw_xml": debug_raw_xml(root)}
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
 

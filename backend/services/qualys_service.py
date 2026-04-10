@@ -49,6 +49,12 @@ def _kb_request(params: dict) -> ET.Element:
     return root
 
 
+def debug_raw_xml(root: ET.Element) -> str:
+    """Temporary: returns raw XML of first VULN for debugging."""
+    vuln = root.find(".//VULN")
+    return ET.tostring(vuln, encoding="unicode") if vuln is not None else ""
+
+
 def _parse_vulns(root: ET.Element) -> list[dict]:
     vulns = []
     for vuln in root.findall(".//VULN"):
@@ -78,7 +84,8 @@ def _parse_vulns(root: ET.Element) -> list[dict]:
             "last_modified":        get("LAST_SERVICE_MODIFICATION_DATETIME"),
             # Patch info
             "patchable":            get("PATCHABLE"),
-            "patch_published":      get("PATCH_PUBLISHED_DATETIME"),
+            "virtual_patch":        get("VIRTUAL_PATCH_AVAILABLE"),
+            "patch_published":      get("PATCH_PUBLISHED_DATETIME") or get("CORRELATION/PATCH_PUBLISHED_DATETIME"),
             # CVSS v2
             "cvss_base":            get("CVSS/BASE"),
             "cvss_temporal":        get("CVSS/TEMPORAL"),
@@ -90,8 +97,8 @@ def _parse_vulns(root: ET.Element) -> list[dict]:
             "cvss3_vector":         get("CVSS_V3/VECTOR_STRING"),
             "cvss3_attack_vector":  get("CVSS_V3/ATTACK"),
             # References
-            "cve_ids":              get_all(".//CVE_ID"),
-            "bugtraq_ids":          get_all(".//BUGTRAQ_ID"),
+            "cve_ids":              get_all(".//CVE_LIST/CVE/ID"),
+            "bugtraq_ids":          get_all(".//BUGTRAQ_LIST/BUGTRAQ/ID"),
             "vendor_refs":          get_all(".//VENDOR_REFERENCE_LIST/VENDOR_REFERENCE/ID"),
             # Threat intelligence
             "threat_intel":         ", ".join([
@@ -110,12 +117,31 @@ def _parse_vulns(root: ET.Element) -> list[dict]:
                 }
                 for c in vuln.findall(".//COMPLIANCE_LIST/COMPLIANCE")
             ],
+            # Discovery
+            "discovery_remote":     get("DISCOVERY/REMOTE"),
+            "discovery_auth":       ", ".join([
+                el.text.strip()
+                for el in vuln.findall(".//DISCOVERY/AUTH_TYPE_LIST/AUTH_TYPE")
+                if el.text
+            ]),
+            # Affected versions
+            "affected_products":    get_html("AFFECTED_PRODUCTS"),
+            # Supported modules
+            "supported_modules":    get("SUPPORTED_MODULES"),
+            # Edited
+            "edited":               get("EDITED"),
+            # Ownership / dates
+            "owner":                get("OWNER"),
+            "created":              get("CREATION_DATETIME"),
+            "user_modified":        get("USER_MODIFIED_DATETIME"),
+            "modified_by":          get("MODIFIED_BY"),
+            "code_modified":        get("CODE_MODIFIED_DATETIME"),
             # Content
             "diagnosis":            get_html("DIAGNOSIS"),
             "consequence":          get_html("CONSEQUENCE"),
             "solution":             get_html("SOLUTION"),
-            "exploitability":       get("EXPLOITABILITY"),
-            "associated_malware":   get("ASSOCIATED_MALWARE"),
+            "exploitability":       get("CORRELATION/EXPLOITABILITY") or get("EXPLOITABILITY") or get(".//EXPLOITABILITY"),
+            "associated_malware":   get("ASSOCIATED_MALWARE") or get(".//ASSOCIATED_MALWARE"),
             "news_or_patch":        get("NEWS_OR_PATCH"),
             "is_disabled":          get("IS_DISABLED"),
             "is_ignored":           get("IS_IGNORED"),
