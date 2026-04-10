@@ -49,5 +49,22 @@
       "shodan_vulns": [],
       "threat_intel_summary": "AbuseIPDB confidence score: 0% (0 reports)."
     }
+  },
+  "http://10.5.2.100/": {
+    "cached_at": "2026-04-10T10:46:31.945967+00:00",
+    "value": {
+      "internet_facing": false,
+      "asn": "",
+      "org": "",
+      "country": "",
+      "hosting_provider": "",
+      "abuse_confidence": -1,
+      "abuse_reports": -1,
+      "is_known_scanner": false,
+      "greynoise_classification": "unknown",
+      "shodan_ports": [],
+      "shodan_vulns": [],
+      "threat_intel_summary": "No significant threat signals detected."
+    }
   }
 }
