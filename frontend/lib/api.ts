@@ -92,6 +92,34 @@ export function formatSecs(secs: number): string {
   return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
+// ── Qualys ────────────────────────────────────────────────────────────────────────────────
+
+export async function uploadQualys(file: File, scanName?: string): Promise<{ job_id: string; filename: string }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (scanName) fd.append("scan_name", scanName);
+  const res = await fetch(`${BASE}/api/qualys/upload`, { method: "POST", body: fd });
+  if (!res.ok) throw new Error("Upload failed");
+  return res.json();
+}
+
+export async function listQualysScans(): Promise<QualysScanSession[]> {
+  const res = await fetch(`${BASE}/api/qualys/scans`);
+  if (!res.ok) throw new Error("Failed to fetch qualys scans");
+  return res.json();
+}
+
+export async function getQualysScan(scanId: string): Promise<QualysScanDetail> {
+  const res = await fetch(`${BASE}/api/qualys/scans/${scanId}`);
+  if (!res.ok) throw new Error("Failed to fetch qualys scan");
+  return res.json();
+}
+
+export async function deleteQualysScan(scanId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/qualys/scans/${scanId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete qualys scan");
+}
+
 export function createWebSocket(jobId: string): WebSocket {
   const WS = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8001";
   return new WebSocket(`${WS}/ws/${jobId}`);
@@ -190,3 +218,66 @@ export type ExploitRecord = {
   analysed_at: string;
   result: ExploitResult;
 };
+
+export type QualysScanSession = {
+  id: string;
+  filename: string;
+  scan_name: string | null;
+  total_rows: number;
+  total_asset_secs: number;
+  status: "processing" | "done" | "error";
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type QualysRow = {
+  id: string;
+  scan_id: string;
+  row_index: number;
+  status: "pending" | "done" | "error";
+  result: {
+    cve: string;
+    cve_description: string;
+    cvss_v2: string;
+    cvss_v3: string;
+    qid: string;
+    title: string;
+    severity: string;
+    kb_severity: string;
+    type_detected: string;
+    last_detected: string;
+    first_detected: string;
+    protocol: string;
+    port: string;
+    vuln_status: string;
+    asset_id: string;
+    asset_name: string;
+    asset_ipv4: string;
+    asset_ipv6: string;
+    solution: string;
+    asset_tags: string;
+    disabled: string;
+    ignored: string;
+    qvs_score: string;
+    detection_age: string;
+    published_date: string;
+    patch_released: string;
+    category: string;
+    cvss_rating_label: string;
+    rti: string;
+    operating_system: string;
+    last_fixed: string;
+    last_reopened: string;
+    times_detected: string;
+    threat: string;
+    vuln_patchable: string;
+    asset_critical_score: string;
+    trurisk_score: string;
+    vulnerability_tags: string;
+    results: string;
+  } | null;
+  started_at: string | null;
+  scanned_at: string | null;
+};
+
+export type QualysScanDetail = QualysScanSession & { rows: QualysRow[] };
