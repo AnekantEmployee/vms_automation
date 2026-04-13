@@ -147,9 +147,13 @@ export default function ScanDetailPage() {
   const router = useRouter();
   const [scan, setScan]         = useState<ScanDetail | null>(null);
   const [loading, setLoading]   = useState(true);
-  const [hovered, setHovered]     = useState<string | null>(null);
-  const [deleting, setDeleting]   = useState<string | null>(null);
-  const [showAdd, setShowAdd]     = useState(false);
+  const [hovered, setHovered]   = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [showAdd, setShowAdd]   = useState(false);
+  const [search, setSearch]     = useState("");
+  const [filterStatus, setFilterStatus] = useState<"all" | "done" | "pending" | "error">("all");
+  const [sortBy, setSortBy]     = useState<"index" | "score" | "ip">("index");
+  const [sortDir, setSortDir]   = useState<"asc" | "desc">("asc");
 
   const fetchScan = async () => {
     try { setScan(await getScan(scan_id)); } finally { setLoading(false); }
@@ -177,6 +181,33 @@ export default function ScanDetailPage() {
   const pending  = scan.assets.filter((a) => a.status === "pending").length;
   const errors   = scan.assets.filter((a) => a.status === "error").length;
   const progress = scan.total_assets ? Math.round((done / scan.total_assets) * 100) : 0;
+
+  const visibleAssets = scan.assets
+    .filter((a) => {
+      if (filterStatus !== "all" && a.status !== filterStatus) return false;
+      if (search && !a.ip.includes(search) && !(a.declared_role ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "score") {
+        const sa = (a.result?.score as number) ?? -1;
+        const sb = (b.result?.score as number) ?? -1;
+        cmp = sa - sb;
+      } else if (sortBy === "ip") {
+        cmp = a.ip.localeCompare(b.ip);
+      } else {
+        cmp = a.row_index - b.row_index;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+  const toggleSort = (col: typeof sortBy) => {
+    if (sortBy === col) setSortDir((d) => d === "asc" ? "desc" : "asc");
+    else { setSortBy(col); setSortDir("asc"); }
+  };
+
+  const SEL: React.CSSProperties = { background: "#111118", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "5px 8px", fontSize: "12px", color: "#a1a1aa", outline: "none", cursor: "pointer" };
 
   return (
     <div style={{ padding: "36px 40px", width: "100%", boxSizing: "border-box" }}>

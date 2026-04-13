@@ -22,15 +22,17 @@ Returns:
 """
 
 import nvdlib
+import time
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 _LOOKBACK_DAYS  = 365
-_CHUNK_DAYS     = 110   # NVD rejects date ranges > 120 days
+_CHUNK_DAYS     = 110
 _MAX_PER_QUERY  = 10
-_MAX_WORKERS    = 5
+_MAX_WORKERS    = 3   # reduced to be polite to NVD
 _MAX_TOP_CVES   = 5
+_RETRY_WAIT     = 6   # seconds to wait on 429 before retrying once
 
 
 def _search(keyword: str) -> list:
@@ -38,16 +40,23 @@ def _search(keyword: str) -> list:
     end = now
     start = now - timedelta(days=_LOOKBACK_DAYS)
     while start < end:
-        chunk_end   = min(start + timedelta(days=_CHUNK_DAYS), end)
-        try:
-            results += nvdlib.searchCVE(
-                keywordSearch=keyword,
-                pubStartDate=start,
-                pubEndDate=chunk_end,
-                limit=_MAX_PER_QUERY,
-            )
-        except Exception as e:
-            print(f"[cve] Skipping '{keyword}' chunk {start.date()}–{chunk_end.date()}: {e}")
+        chunk_end = min(start + timedelta(days=_CHUNK_DAYS), end)
+        for attempt in range(2):  # 1 retry on 429
+            try:
+                results += nvdlib.searchCVE(
+                    keywordSearch=keyword,
+                    pubStartDate=start,
+                    pubEndDate=chunk_end,
+                    limit=_MAX_PER_QUERY,
+                )
+                break
+            except Exception as e:
+                if "429" in str(e) and attempt == 0:
+                    time.sleep(_RETRY_WAIT)
+                else:
+                    if "429" not in str(e):
+                        print(f"[cve] Skipping '{keyword}' chunk {start.date()}–{chunk_end.date()}: {e}")
+                    break
         start = chunk_end
     return results
 

@@ -97,9 +97,25 @@ export default function AssetDetailPage() {
   if (!asset)  return <div style={{ padding: "48px", color: "#f87171" }}>Asset not found.</div>;
 
   const r = asset.result ?? {};
-  const score          = r.score as number;
-  const tier           = r.tier as string;
-  const tierLabel      = r.tier_label as string;
+
+  // If risk_scoring JSON was truncated, the raw partial JSON may be stored in summary.
+  // Try to parse it and merge the real fields.
+  let riskResult = r;
+  const rawSummary = r.summary as string;
+  if (rawSummary && rawSummary.trim().startsWith("{")) {
+    try {
+      const parsed = JSON.parse(rawSummary);
+      riskResult = { ...r, ...parsed };
+    } catch {
+      // leave as-is
+    }
+  }
+  const score          = (riskResult.score as number) || 0;
+  const tier           = (riskResult.tier as string) || "—";
+  const tierLabel      = (riskResult.tier_label as string) || "Unknown";
+  const riskFactors    = (riskResult.risk_factors as string[]) ?? [];
+  const remediation    = (riskResult.remediation as string[]) ?? [];
+  const summary        = rawSummary?.trim().startsWith("{") ? ((riskResult.summary as string) || "") : (rawSummary || "");
   const confirmedRole  = r.confirmed_role as string;
   const detectedRoles  = r.detected_roles as string[] ?? [];
   const roleConfidence = r.role_confidence as string;
@@ -134,10 +150,6 @@ export default function AssetDetailPage() {
   const lowCves      = r.low_cves as number;
   const maxCvss      = r.max_cvss as number;
   const topCves      = r.top_cves as { id: string; cvss: number; description: string }[] ?? [];
-
-  const riskFactors  = r.risk_factors as string[] ?? [];
-  const remediation  = r.remediation as string[] ?? [];
-  const summary      = r.summary as string;
 
   const col2: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 32px" };
 

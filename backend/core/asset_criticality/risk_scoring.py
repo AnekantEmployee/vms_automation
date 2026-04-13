@@ -108,6 +108,10 @@ Respond ONLY with valid JSON, no markdown, no explanation:
     raw = llm(prompt)
     try:
         clean = re.sub(r"```(?:json)?|```", "", raw).strip()
+        # If truncated, try to close the JSON and parse what we have
+        if not clean.endswith("}"):
+            # Find last complete field before truncation
+            clean = clean.rsplit(",", 1)[0] + "\n}}"
         result = json.loads(clean)
 
         # Validate + normalise
