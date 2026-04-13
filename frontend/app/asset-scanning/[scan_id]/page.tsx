@@ -202,11 +202,6 @@ export default function ScanDetailPage() {
       return sortDir === "asc" ? cmp : -cmp;
     });
 
-  const toggleSort = (col: typeof sortBy) => {
-    if (sortBy === col) setSortDir((d) => d === "asc" ? "desc" : "asc");
-    else { setSortBy(col); setSortDir("asc"); }
-  };
-
   const SEL: React.CSSProperties = { background: "#111118", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "5px 8px", fontSize: "12px", color: "#a1a1aa", outline: "none", cursor: "pointer" };
 
   return (
@@ -267,8 +262,35 @@ export default function ScanDetailPage() {
 
       {/* Assets Table */}
       <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "12px", overflow: "hidden" }}>
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid #1f1f2e" }}>
-          <span style={{ fontSize: "13px", fontWeight: 600, color: "white" }}>Assets ({scan.assets.length})</span>
+        <div style={{ padding: "12px 20px", borderBottom: "1px solid #1f1f2e", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
+          <span style={{ fontSize: "13px", fontWeight: 600, color: "white", whiteSpace: "nowrap" }}>Assets ({visibleAssets.length}{visibleAssets.length !== scan.assets.length ? ` of ${scan.assets.length}` : ""})</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+            {/* Search */}
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search IP or role…"
+              style={{ background: "#111118", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "5px 10px", fontSize: "12px", color: "white", outline: "none", width: "160px" }}
+            />
+            {/* Filter */}
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as typeof filterStatus)} style={SEL}>
+              <option value="all">All statuses</option>
+              <option value="done">Done</option>
+              <option value="pending">Pending</option>
+              <option value="error">Error</option>
+            </select>
+            {/* Sort */}
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as typeof sortBy)} style={SEL}>
+              <option value="index">Sort: Default</option>
+              <option value="score">Sort: Risk Score</option>
+              <option value="ip">Sort: IP</option>
+            </select>
+            <button onClick={() => setSortDir((d) => d === "asc" ? "desc" : "asc")}
+              style={{ background: "#111118", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "5px 8px", color: "#a1a1aa", cursor: "pointer", fontSize: "12px", lineHeight: 1 }}
+              title={sortDir === "asc" ? "Ascending" : "Descending"}>
+              {sortDir === "asc" ? "↑" : "↓"}
+            </button>
+          </div>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "780px" }}>
@@ -280,7 +302,9 @@ export default function ScanDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {scan.assets.map((asset) => {
+              {visibleAssets.length === 0 ? (
+                <tr><td colSpan={8} style={{ padding: "40px", textAlign: "center", color: "#52525b", fontSize: "13px" }}>No assets match your filters.</td></tr>
+              ) : visibleAssets.map((asset) => {
                 const score     = asset.result?.score as number | undefined;
                 const clickable = asset.status === "done";
                 return (
