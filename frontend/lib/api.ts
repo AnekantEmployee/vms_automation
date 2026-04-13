@@ -1,5 +1,7 @@
 const BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
 
+// ── Asset Scanning ────────────────────────────────────────────────────────────
+
 export async function uploadExcel(file: File, scanName?: string): Promise<{ job_id: string; filename: string }> {
   const fd = new FormData();
   fd.append("file", file);
@@ -53,6 +55,13 @@ export async function addExcelAssets(scanId: string, file: File): Promise<void> 
   if (!res.ok) throw new Error("Failed to add assets from file");
 }
 
+export async function searchByIp(ip: string): Promise<AssetRow[]> {
+  const res = await fetch(`${BASE}/api/scans/search?ip=${encodeURIComponent(ip)}`);
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error("Search failed");
+  return res.json();
+}
+
 // ── CVE Exploitability ────────────────────────────────────────────────────────
 
 export async function listExploits(): Promise<ExploitRecord[]> {
@@ -79,20 +88,41 @@ export async function deleteExploit(cveId: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete CVE record");
 }
 
-export function duration(start: string | null, end: string | null): string {
-  if (!start || !end) return "—";
-  const secs = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
-  return formatSecs(secs);
+// ── Recon ─────────────────────────────────────────────────────────────────────
+
+export async function startRecon(domain: string): Promise<{ job_id: string; domain: string; status: string }> {
+  const res = await fetch(`${BASE}/api/recon/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ domain }),
+  });
+  if (!res.ok) throw new Error("Failed to start recon");
+  return res.json();
 }
 
-export function formatSecs(secs: number): string {
-  if (!secs) return "—";
-  if (secs < 60) return `${secs}s`;
-  const m = Math.floor(secs / 60), s = secs % 60;
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+export async function getReconJob(jobId: string): Promise<ReconJob> {
+  const res = await fetch(`${BASE}/api/recon/${jobId}`);
+  if (!res.ok) throw new Error("Failed to fetch recon job");
+  return res.json();
 }
 
-// ── Qualys ────────────────────────────────────────────────────────────────────────────────
+export async function listReconJobs(): Promise<ReconJob[]> {
+  const res = await fetch(`${BASE}/api/recon/jobs`);
+  if (!res.ok) throw new Error("Failed to fetch recon jobs");
+  return res.json();
+}
+
+export async function importRecon(jobId: string, scanName?: string): Promise<{ scan_id: string; total_assets: number }> {
+  const res = await fetch(`${BASE}/api/recon/${jobId}/import`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scan_name: scanName || "" }),
+  });
+  if (!res.ok) throw new Error("Failed to import recon assets");
+  return res.json();
+}
+
+// ── Qualys ────────────────────────────────────────────────────────────────────
 
 export async function uploadQualys(file: File, scanName?: string): Promise<{ job_id: string; filename: string }> {
   const fd = new FormData();
@@ -115,11 +145,9 @@ export async function getQualysScan(scanId: string): Promise<QualysScanDetail> {
   return res.json();
 }
 
-export async function searchByIp(ip: string): Promise<AssetRow[]> {
-  const res = await fetch(`${BASE}/api/scans/search?ip=${encodeURIComponent(ip)}`);
-  if (res.status === 404) return [];
-  if (!res.ok) throw new Error("Search failed");
-  return res.json();
+export async function deleteQualysScan(scanId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/qualys/scans/${scanId}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete qualys scan");
 }
 
 export async function deleteQualysRow(scanId: string, rowId: string): Promise<void> {
@@ -127,9 +155,19 @@ export async function deleteQualysRow(scanId: string, rowId: string): Promise<vo
   if (!res.ok) throw new Error("Failed to delete row");
 }
 
-export async function deleteQualysScan(scanId: string): Promise<void> {
-  const res = await fetch(`${BASE}/api/qualys/scans/${scanId}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to delete qualys scan");
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+export function duration(start: string | null, end: string | null): string {
+  if (!start || !end) return "—";
+  const secs = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000);
+  return formatSecs(secs);
+}
+
+export function formatSecs(secs: number): string {
+  if (!secs) return "—";
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60), s = secs % 60;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
 export function createWebSocket(jobId: string): WebSocket {
@@ -174,8 +212,6 @@ export type AssetRow = {
 };
 
 export type ScanDetail = ScanSession & { assets: AssetRow[] };
-
-// ── CVE Exploitability types ────────────────────────────────────────────────────
 
 export type UniqueExploit = {
   name: string;
@@ -229,6 +265,31 @@ export type ExploitRecord = {
   cve_id: string;
   analysed_at: string;
   result: ExploitResult;
+};
+
+export type ReconAsset = {
+  ip: string;
+  hostnames: string[];
+  asn: string;
+  org: string;
+  country: string;
+  region: string;
+  city: string;
+  anycast: boolean;
+  asset_role: string;
+  data_classification: string;
+  environment: string;
+};
+
+export type ReconJob = {
+  id: string;
+  domain: string;
+  status: "processing" | "done" | "error";
+  total_assets: number | null;
+  assets: ReconAsset[] | null;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
 };
 
 export type QualysScanSession = {
@@ -287,37 +348,6 @@ export type QualysRow = {
     trurisk_score: string;
     vulnerability_tags: string;
     results: string;
-    kb?: {
-      qid: string;
-      vuln_type: string;
-      severity: string;
-      title: string;
-      category: string;
-      sub_category: string;
-      published: string;
-      last_modified: string;
-      patchable: string;
-      patch_published: string;
-      cvss_base: string;
-      cvss_temporal: string;
-      cvss_vector: string;
-      cvss3_base: string;
-      cvss3_temporal: string;
-      cvss3_vector: string;
-      cvss3_attack_vector: string;
-      cve_ids: string[];
-      threat_intel: string;
-      affected_software: string[];
-      affected_products: string;
-      diagnosis: string;
-      consequence: string;
-      solution: string;
-      exploitability: string;
-      associated_malware: string;
-      discovery_remote: string;
-      discovery_auth: string;
-      compliance: { type: string; section: string; description: string }[];
-    };
   } | null;
   started_at: string | null;
   scanned_at: string | null;

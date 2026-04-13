@@ -1,0 +1,296 @@
+{
+  "domain": "yash.com",
+  "timestamp": "2026-04-10 22:10:07.602261",
+  "subdomains": [
+    "analytics.amuraa.yash.com",
+    "autodiscover.yash.com",
+    "av.yash.com",
+    "btcvpn.yash.com",
+    "campaign.yash.com",
+    "careers.yash.com",
+    "citvpn.yash.com",
+    "codequalitysq.yash.com",
+    "dialin.yash.com",
+    "engage.yash.com",
+    "event.yash.com",
+    "external.yash.com",
+    "gccvaluejourney.yash.com",
+    "hydmail003.yash.com",
+    "hydmail004.yash.com",
+    "hydmail005.yash.com",
+    "hydmail006.yash.com",
+    "hydocsedg.yash.com",
+    "hydocsfe.yash.com",
+    "iconnect.yash.com",
+    "inhydhrmslxdb.yash.com",
+    "ithelpdesk.yash.com",
+    "ithelpdeskmsp.yash.com",
+    "itsdmsp.yash.com",
+    "mail.yash.com",
+    "meet.yash.com",
+    "pinnacle.yash.com",
+    "sapsupport.yash.com",
+    "sip.yash.com",
+    "staging.yash.com",
+    "tosca.yash.com",
+    "web.yash.com",
+    "webconf.yash.com",
+    "webinar.yash.com",
+    "www.careers.yash.com",
+    "www.pinnacle.yash.com",
+    "www.sip.yash.com",
+    "www.yash.com",
+    "www2.yash.com",
+    "yashmail001.yash.com",
+    "you.yash.com"
+  ],
+  "dns_records": {
+    "A": [],
+    "AAAA": [],
+    "MX": [
+      "10 smtp.yash.com.",
+      "20 smtp.yash.com."
+    ],
+    "NS": [
+      "pdns01.domaincontrol.com.",
+      "pdns02.domaincontrol.com."
+    ],
+    "TXT": [],
+    "CNAME": [],
+    "SOA": [
+      "pdns01.domaincontrol.com. dns.jomax.net. 2026033000 28800 7200 604800 600"
+    ]
+  },
+  "ip_asn": {
+    "10.17.1.105": {
+      "host": "yash.com",
+      "org": "N/A",
+      "asn": "N/A",
+      "country": "N/A",
+      "region": "N/A",
+      "city": "N/A"
+    },
+    "10.10.2.112": {
+      "host": "mail.yash.com",
+      "org": "N/A",
+      "asn": "N/A",
+      "country": "N/A",
+      "region": "N/A",
+      "city": "N/A"
+    },
+    "10.10.2.101": {
+      "host": "autodiscover.yash.com",
+      "org": "N/A",
+      "asn": "N/A",
+      "country": "N/A",
+      "region": "N/A",
+      "city": "N/A"
+    },
+    "18.66.57.83": {
+      "host": "gccvaluejourney.yash.com",
+      "org": "AS16509 Amazon.com, Inc.",
+      "asn": "AS16509",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Mumbai"
+    },
+    "18.208.112.46": {
+      "host": "webinar.yash.com",
+      "org": "AS14618 Amazon.com, Inc.",
+      "asn": "AS14618",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn"
+    },
+    "35.174.78.146": {
+      "host": "www2.yash.com",
+      "org": "AS14618 Amazon.com, Inc.",
+      "asn": "AS14618",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn"
+    },
+    "199.60.103.226": {
+      "host": "web.yash.com",
+      "org": "AS209242 Cloudflare London, LLC",
+      "asn": "AS209242",
+      "country": "US",
+      "region": "Massachusetts",
+      "city": "Cambridge"
+    },
+    "10.10.1.198": {
+      "host": "hydmail006.yash.com",
+      "org": "N/A",
+      "asn": "N/A",
+      "country": "N/A",
+      "region": "N/A",
+      "city": "N/A"
+    },
+    "108.158.46.19": {
+      "host": "staging.yash.com",
+      "org": "AS16509 Amazon.com, Inc.",
+      "asn": "AS16509",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Mumbai"
+    },
+    "52.5.244.93": {
+      "host": "itsdmsp.yash.com",
+      "org": "AS14618 Amazon.com, Inc.",
+      "asn": "AS14618",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn"
+    },
+    "10.6.16.32": {
+      "host": "dialin.yash.com",
+      "org": "N/A",
+      "asn": "N/A",
+      "country": "N/A",
+      "region": "N/A",
+      "city": "N/A"
+    },
+    "14.143.131.254": {
+      "host": "citvpn.yash.com",
+      "org": "AS4755 TATA Communications formerly VSNL is Leading ISP",
+      "asn": "AS4755",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Mumbai"
+    },
+    "52.22.4.248": {
+      "host": "sapsupport.yash.com",
+      "org": "AS14618 Amazon.com, Inc.",
+      "asn": "AS14618",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn"
+    },
+    "18.172.78.99": {
+      "host": "www.yash.com",
+      "org": "AS16509 Amazon.com, Inc.",
+      "asn": "AS16509",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Mumbai"
+    },
+    "10.18.1.121": {
+      "host": "you.yash.com",
+      "org": "N/A",
+      "asn": "N/A",
+      "country": "N/A",
+      "region": "N/A",
+      "city": "N/A"
+    },
+    "52.7.100.36": {
+      "host": "ithelpdesk.yash.com",
+      "org": "AS14618 Amazon.com, Inc.",
+      "asn": "AS14618",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn"
+    },
+    "10.26.2.71": {
+      "host": "iconnect.yash.com",
+      "org": "N/A",
+      "asn": "N/A",
+      "country": "N/A",
+      "region": "N/A",
+      "city": "N/A"
+    },
+    "18.215.0.93": {
+      "host": "codequalitysq.yash.com",
+      "org": "AS14618 Amazon.com, Inc.",
+      "asn": "AS14618",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn"
+    },
+    "23.53.243.37": {
+      "host": "engage.yash.com",
+      "org": "AS20940 Akamai International B.V.",
+      "asn": "AS20940",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Artist Village"
+    },
+    "20.53.137.97": {
+      "host": "careers.yash.com",
+      "org": "AS8075 Microsoft Corporation",
+      "asn": "AS8075",
+      "country": "AU",
+      "region": "New South Wales",
+      "city": "Sydney"
+    },
+    "104.17.135.180": {
+      "host": "campaign.yash.com",
+      "org": "AS13335 Cloudflare, Inc.",
+      "asn": "AS13335",
+      "country": "US",
+      "region": "California",
+      "city": "San Francisco"
+    },
+    "49.249.104.254": {
+      "host": "btcvpn.yash.com",
+      "org": "AS45820 Tata Teleservices ISP AS",
+      "asn": "AS45820",
+      "country": "IN",
+      "region": "Gujarat",
+      "city": "Ahmedabad"
+    }
+  },
+  "reverse_ip": {
+    "18.66.57.83": [
+      "No DNS A records found"
+    ],
+    "18.208.112.46": [
+      "etickets.aljemtec.com",
+      "ec2-18-208-112-46.compute-1.amazonaws.com",
+      "www.banebh.com",
+      "events.blacdeem.com",
+      "event.dbcroch.com",
+      "events.deirachilliband.com",
+      "tickets.gauzefx.com",
+      "events.theminacup.com",
+      "events.tiptopeventsae.com",
+      "www.trworldfight.com",
+      "events.vanzcorp.com",
+      "event.yash.com",
+      "tg.artlogica.eu",
+      "pdic.virtualeventph.net",
+      "eventtiks.icast.network",
+      "caddydown.dabibu.shop"
+    ]
+  },
+  "emails": [],
+  "wayback_urls": [
+    {
+      "url": "https://www.yash.com/&quot;,&quot;followUpButtonEnabled&quot;:true,&quot;tierLabel&quot;:&quot;Exhibitor&quot;,&quot;tierColor&quot;:&quot;000000&quot;,&quot;created&quot;:1728508667771,&quot;modified&quot;:1728508667771,&quot;entityType&quot;:&quot;partners&quot;,&quot;logoPhotoUrl&quot;:%7B&quot;small&quot;:&quot;https://res.cloudinary.com/bizzaboprod/image/upload/q_auto,f_auto,c_scale,c_crop,g_custom/v1723701437/jjmv8ca3rmuzb3ehqict&quot;,&quot;medium&quot;:&quot;https://res.cloudinary.com/bizzaboprod/image/upload/q_auto,f_auto,c_scale,c_crop,g_custom/v1723701437/jjmv8ca3rmuzb3ehqict&quot;,&quot;large&quot;:&quot;https://res.cloudinary.com/bizzaboprod/image/upload/q_auto,f_auto,c_scale,c_crop,g_custom/v1723701437/jjmv8ca3rmuzb3ehqict&quot;,&quot;blur&quot;:&quot;https://res.cloudinary.com/bizzaboprod/image/upload/q_auto,f_auto,c_scale,c_crop,g_custom/v1723701437/jjmv8ca3rmuzb3ehqict&quot;%7D",
+      "status": "403",
+      "timestamp": "20241009211749"
+    },
+    {
+      "url": "https://www.yash.com/&quot;,&quot;followUpButtonEnabled&quot;:true,&quot;tierLabel&quot;:&quot;Exhibitor&quot;,&quot;tierColor&quot;:&quot;000000&quot;,&quot;created&quot;:1744016956208,&quot;modified&quot;:1744016956208,&quot;entityType&quot;:&quot;partners&quot;,&quot;logoPhotoUrl&quot;:%7B&quot;small&quot;:&quot;https://assets-ext.bizzabo.com/bizzaboprod/image/upload/q_auto,f_auto,c_scale,c_crop,g_custom/v1723701437/jjmv8ca3rmuzb3ehqict&quot;,&quot;medium&quot;:&quot;https://assets-ext.bizzabo.com/bizzaboprod/image/upload/q_auto,f_auto,c_scale,c_crop,g_custom/v1723701437/jjmv8ca3rmuzb3ehqict&quot;,&quot;large&quot;:&quot;https://assets-ext.bizzabo.com/bizzaboprod/image/upload/q_auto,f_auto,c_scale,c_crop,g_custom/v1723701437/jjmv8ca3rmuzb3ehqict&quot;,&quot;blur&quot;:&quot;https://assets-ext.bizzabo.com/bizzaboprod/image/upload/q_auto,f_auto,c_scale,c_crop,g_custom/v1723701437/jjmv8ca3rmuzb3ehqict&quot;%7D",
+      "status": "403",
+      "timestamp": "20250407090920"
+    },
+    {
+      "url": "https://www.yash.com/.well-known/openid-configuration",
+      "status": "301",
+      "timestamp": "20230601081158"
+    }
+  ],
+  "google_dorks": [
+    "site:yash.com",
+    "site:yash.com filetype:pdf",
+    "site:yash.com filetype:xls OR filetype:xlsx OR filetype:csv",
+    "site:yash.com inurl:admin OR inurl:login OR inurl:dashboard",
+    "site:yash.com intext:password OR intext:passwd OR intext:secret",
+    "site:yash.com ext:env OR ext:config OR ext:bak",
+    "site:yash.com inurl:api",
+    "\"@yash.com\" email contact",
+    "site:linkedin.com \"yash.com\" employees",
+    "site:github.com \"yash.com\"",
+    "site:pastebin.com \"yash.com\""
+  ]
+}

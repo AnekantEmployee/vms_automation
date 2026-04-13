@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatSecs } from "@/lib/api";
+import { formatSecs, startRecon, getReconJob, importRecon, type ReconJob, type ReconAsset } from "@/lib/api";
 import { useAssetStore } from "@/store/useAssetStore";
 
 const TH: React.CSSProperties = { fontSize: "11px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, padding: "12px 20px", textAlign: "left", whiteSpace: "nowrap" };
 const TD: React.CSSProperties = { fontSize: "13px", color: "#d4d4d8", padding: "14px 20px", whiteSpace: "nowrap" };
+const INPUT: React.CSSProperties = { width: "100%", background: "#111118", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "9px 12px", fontSize: "13px", color: "white", outline: "none", boxSizing: "border-box" };
 
 function Badge({ status }: { status: string }) {
   const map: Record<string, [string, string, string]> = {
@@ -18,24 +19,73 @@ function Badge({ status }: { status: string }) {
   return <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: bg, color, border: `1px solid ${border}`, fontWeight: 600, whiteSpace: "nowrap" }}>{status}</span>;
 }
 
-const INPUT: React.CSSProperties = { width: "100%", background: "#111118", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "9px 12px", fontSize: "13px", color: "white", outline: "none", boxSizing: "border-box" };
+function ClassBadge({ val }: { val: string }) {
+  const map: Record<string, string> = { public: "#34d399", internal: "#fbbf24", confidential: "#818cf8", restricted: "#f87171", Unknown: "#52525b" };
+  const color = map[val] ?? "#52525b";
+  return <span style={{ fontSize: "11px", padding: "3px 8px", borderRadius: "999px", background: `${color}18`, color, border: `1px solid ${color}44`, fontWeight: 600 }}>{val}</span>;
+}
 
-function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+// ── Modal ──────────────────────────────────────────────────────────────────────
+
+function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (scanId?: string) => void }) {
+  const router    = useRouter();
   const inputRef  = useRef<HTMLInputElement>(null);
-  const [tab, setTab]         = useState<"excel" | "manual">("excel");
+  const pollRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { upload } = useAssetStore();
+
+  const [tab, setTab]           = useState<"domain" | "excel" | "manual">("domain");
   const [scanName, setScanName] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
 
-  // Manual form
-  const [ip, setIp]           = useState("");
-  const [role, setRole]       = useState("");
-  const [dc, setDc]           = useState("internal");
-  const [env, setEnv]         = useState("production");
-  const [owner, setOwner]     = useState("");
+  // Excel / Manual fields
+  const [ip, setIp]       = useState("");
+  const [role, setRole]   = useState("");
+  const [dc, setDc]       = useState("internal");
+  const [env, setEnv]     = useState("production");
+  const [owner, setOwner] = useState("");
 
-  const { upload } = useAssetStore();
+  // Domain recon state
+  const [domain, setDomain]       = useState("");
+  const [job, setJob]             = useState<ReconJob | null>(null);
+  const [reconRunning, setReconRunning] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [hoveredIp, setHoveredIp] = useState<string | null>(null);
+
+  const stopPoll = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  useEffect(() => () => stopPoll(), []);
+
+  // ── Domain handlers ──────────────────────────────────────────────────────────
+
+  const handleStartRecon = async () => {
+    if (!domain.trim()) { setError("Enter a domain."); return; }
+    setError(null); setReconRunning(true); setJob(null);
+    try {
+      const res = await startRecon(domain.trim());
+      setJob({ id: res.job_id, domain: res.domain, status: "processing", total_assets: null, assets: null, error: null, created_at: new Date().toISOString(), completed_at: null });
+      pollRef.current = setInterval(async () => {
+        const updated = await getReconJob(res.job_id);
+        setJob(updated);
+        if (updated.status !== "processing") stopPoll();
+      }, 3000);
+    } catch { setError("Failed to start recon. Check backend."); }
+    finally { setReconRunning(false); }
+  };
+
+  const handleImportRecon = async () => {
+    if (!job || job.status !== "done") return;
+    setImporting(true); setError(null);
+    try {
+      const res = await importRecon(job.id, scanName || `Recon: ${job.domain}`);
+      onSuccess(res.scan_id);
+      onClose();
+      router.push(`/asset-scanning/${res.scan_id}`);
+    } catch { setError("Import failed."); }
+    finally { setImporting(false); }
+  };
+
+  // ── Excel / Manual handlers ──────────────────────────────────────────────────
 
   const handleFile = async (file: File) => {
     setError(null); setLoading(true);
@@ -49,8 +99,7 @@ function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
     setError(null); setLoading(true);
     try {
       const csv = `asset_ip,asset_role,data_classification,environment,owner_email\n${ip},${role},${dc},${env},${owner}`;
-      const blob = new Blob([csv], { type: "text/csv" });
-      const file = new File([blob], "manual.csv", { type: "text/csv" });
+      const file = new File([new Blob([csv], { type: "text/csv" })], "manual.csv", { type: "text/csv" });
       await upload(file, scanName || ip);
       onSuccess(); onClose();
     } catch { setError("Failed to create scan."); }
@@ -62,9 +111,15 @@ function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
     background: active ? "#1f1f2e" : "transparent", color: active ? "white" : "#71717a", transition: "all 0.15s",
   });
 
+  const assets: ReconAsset[] = job?.assets ?? [];
+
+  // Modal is wider when recon results are showing
+  const wide = tab === "domain" && assets.length > 0;
+
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)" }}>
-      <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "16px", padding: "28px", width: "calc(100% - 48px)", maxWidth: "480px", boxSizing: "border-box" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)", backdropFilter: "blur(4px)", padding: "24px" }}>
+      <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "16px", padding: "28px", width: "100%", maxWidth: wide ? "900px" : "480px", boxSizing: "border-box", maxHeight: "90vh", overflowY: "auto", transition: "max-width 0.3s" }}>
+
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
           <span style={{ fontSize: "16px", fontWeight: 700, color: "white" }}>New Asset Scan</span>
@@ -81,11 +136,94 @@ function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: "4px", background: "#111118", borderRadius: "8px", padding: "4px", marginBottom: "20px" }}>
-          <button style={tabStyle(tab === "excel")}  onClick={() => setTab("excel")}>📄 Upload Excel</button>
-          <button style={tabStyle(tab === "manual")} onClick={() => setTab("manual")}>✏️ Manual Entry</button>
+          <button style={tabStyle(tab === "domain")} onClick={() => { setTab("domain"); setError(null); }}>🌐 Domain Scan</button>
+          <button style={tabStyle(tab === "excel")}  onClick={() => { setTab("excel");  setError(null); }}>📄 Upload Excel</button>
+          <button style={tabStyle(tab === "manual")} onClick={() => { setTab("manual"); setError(null); }}>✏️ Manual Entry</button>
         </div>
 
-        {tab === "excel" ? (
+        {/* ── Domain Scan ── */}
+        {tab === "domain" && (
+          <div>
+            <div style={{ display: "flex", gap: "10px", marginBottom: "16px" }}>
+              <input
+                style={{ ...INPUT, flex: 1 }}
+                placeholder="e.g. example.com"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleStartRecon()}
+              />
+              <button
+                onClick={handleStartRecon}
+                disabled={reconRunning || job?.status === "processing"}
+                style={{ padding: "9px 18px", background: reconRunning || job?.status === "processing" ? "#1f1f2e" : "#00ff9d", color: "#000", fontWeight: 700, fontSize: "13px", border: "none", borderRadius: "8px", cursor: reconRunning || job?.status === "processing" ? "default" : "pointer", whiteSpace: "nowrap" }}
+              >
+                {reconRunning ? "Starting..." : job?.status === "processing" ? "Scanning..." : "Start Recon"}
+              </button>
+            </div>
+
+            {/* Status bar */}
+            {job && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", padding: "12px 16px", background: "#111118", borderRadius: "8px", marginBottom: "16px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <Badge status={job.status} />
+                  <span style={{ fontSize: "12px", color: "#a1a1aa", fontFamily: "monospace" }}>{job.domain}</span>
+                  {job.status === "processing" && <span style={{ fontSize: "12px", color: "#fbbf24" }}>Running passive recon…</span>}
+                  {job.total_assets != null && <span style={{ fontSize: "12px", color: "#71717a" }}>{job.total_assets} assets found</span>}
+                  {job.error && <span style={{ fontSize: "12px", color: "#f87171" }}>{job.error}</span>}
+                </div>
+                {job.status === "done" && assets.length > 0 && (
+                  <button
+                    onClick={handleImportRecon}
+                    disabled={importing}
+                    style={{ padding: "7px 16px", background: importing ? "#1f1f2e" : "#818cf8", color: "white", fontWeight: 700, fontSize: "12px", border: "none", borderRadius: "8px", cursor: importing ? "default" : "pointer", whiteSpace: "nowrap" }}
+                  >
+                    {importing ? "Importing..." : `Import & Scan (${assets.length})`}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Discovered assets table */}
+            {assets.length > 0 && (
+              <div style={{ border: "1px solid #1f1f2e", borderRadius: "10px", overflow: "hidden" }}>
+                <div style={{ padding: "10px 16px", borderBottom: "1px solid #1f1f2e", fontSize: "11px", color: "#71717a", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Discovered Assets — {assets.length}
+                </div>
+                <div style={{ overflowX: "auto", maxHeight: "320px", overflowY: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "700px" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid #1f1f2e" }}>
+                        {["IP", "Hostnames", "Role", "Classification", "Environment", "Org"].map((h) => (
+                          <th key={h} style={{ ...TH, padding: "10px 14px" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {assets.map((a) => (
+                        <tr key={a.ip}
+                          onMouseEnter={() => setHoveredIp(a.ip)}
+                          onMouseLeave={() => setHoveredIp(null)}
+                          style={{ borderBottom: "1px solid #18181f", background: hoveredIp === a.ip ? "#111118" : "transparent" }}>
+                          <td style={{ ...TD, padding: "10px 14px", color: "#a78bfa", fontFamily: "monospace", fontWeight: 600 }}>{a.ip}</td>
+                          <td style={{ ...TD, padding: "10px 14px", color: "#71717a", fontSize: "12px", maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {a.hostnames.slice(0, 2).join(", ")}{a.hostnames.length > 2 ? ` +${a.hostnames.length - 2}` : ""}
+                          </td>
+                          <td style={{ ...TD, padding: "10px 14px", color: "#a1a1aa", fontSize: "12px" }}>{a.asset_role || "—"}</td>
+                          <td style={{ ...TD, padding: "10px 14px" }}><ClassBadge val={a.data_classification || "Unknown"} /></td>
+                          <td style={{ ...TD, padding: "10px 14px", color: "#71717a" }}>{a.environment || "—"}</td>
+                          <td style={{ ...TD, padding: "10px 14px", color: "#71717a", fontSize: "12px", maxWidth: "160px", overflow: "hidden", textOverflow: "ellipsis" }}>{a.org || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Upload Excel ── */}
+        {tab === "excel" && (
           <>
             <p style={{ fontSize: "11px", color: "#52525b", marginBottom: "14px", lineHeight: 1.6 }}>
               Columns: <code style={{ color: "#00ff9d" }}>asset_ip, asset_role, data_classification, environment, owner_email</code>
@@ -106,7 +244,10 @@ function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
               {loading && <p style={{ fontSize: "12px", color: "#00ff9d", marginTop: "10px", marginBottom: 0 }}>Uploading...</p>}
             </div>
           </>
-        ) : (
+        )}
+
+        {/* ── Manual Entry ── */}
+        {tab === "manual" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
             {[
               { label: "IP Address *", value: ip, set: setIp, placeholder: "e.g. 192.168.1.1" },
@@ -145,25 +286,26 @@ function NewScanModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
   );
 }
 
+// ── Page ───────────────────────────────────────────────────────────────────────
+
 export default function AssetScanningPage() {
   const router = useRouter();
   const { scans, loading, deleting, fetchScans, remove } = useAssetStore();
   const [showModal, setShowModal] = useState(false);
   const [hovered, setHovered]     = useState<string | null>(null);
 
-  const handleDelete = async (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    if (!confirm("Delete this scan and all its assets?")) return;
-    await remove(id);
-  };
-
   useEffect(() => { fetchScans(); }, []);
-
   useEffect(() => {
     if (!scans.some((s) => s.status === "processing")) return;
     const t = setInterval(fetchScans, 5000);
     return () => clearInterval(t);
   }, [scans]);
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm("Delete this scan and all its assets?")) return;
+    await remove(id);
+  };
 
   return (
     <div style={{ padding: "36px 40px", width: "100%", boxSizing: "border-box" }}>
@@ -172,7 +314,7 @@ export default function AssetScanningPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "32px", gap: "16px" }}>
         <div>
           <h1 style={{ fontSize: "22px", fontWeight: 700, color: "white", margin: 0 }}>Asset Scanning</h1>
-          <p style={{ fontSize: "13px", color: "#71717a", marginTop: "4px", marginBottom: 0 }}>Upload and analyse asset lists</p>
+          <p style={{ fontSize: "13px", color: "#71717a", marginTop: "4px", marginBottom: 0 }}>Discover and analyse assets</p>
         </div>
         <button onClick={() => setShowModal(true)}
           style={{ display: "flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: "#00ff9d", color: "#000", fontSize: "13px", fontWeight: 700, borderRadius: "8px", border: "none", cursor: "pointer", flexShrink: 0 }}>

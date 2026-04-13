@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getQualysScan, type QualysRow } from "@/lib/api";
+import { getQualysScan, getExploit, type QualysRow, type ExploitRecord } from "@/lib/api";
 import { AssetScanBadge } from "../../page";
 
 const TH: React.CSSProperties = { fontSize: "10px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: "3px" };
@@ -71,10 +71,16 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
   const router = useRouter();
   const [row, setRow] = useState<QualysRow | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exploit, setExploit] = useState<ExploitRecord | null>(null);
 
   useEffect(() => {
     getQualysScan(scan_id)
-      .then((scan) => setRow(scan.rows.find((r) => r.id === row_id) ?? null))
+      .then((scan) => {
+        const found = scan.rows.find((r) => r.id === row_id) ?? null;
+        setRow(found);
+        const cve = found?.result?.cve;
+        if (cve) getExploit(cve).then(setExploit).catch(() => {});
+      })
       .finally(() => setLoading(false));
   }, [scan_id, row_id]);
 
@@ -239,6 +245,93 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
             )}
           </Section>
         )}
+
+        {/* CVE Exploitability */}
+        {exploit && (() => {
+          const ex = exploit.result;
+          const tierColor: Record<string, string> = {
+            critical: "#f87171", high: "#fbbf24", medium: "#818cf8", low: "#34d399",
+          };
+          const tc = tierColor[ex.exploitability_tier?.toLowerCase() ?? ""] ?? "#71717a";
+          return (
+            <Section title="CVE Exploitability" color="#f87171">
+              {/* Summary bar */}
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "16px", flexWrap: "wrap" }}>
+                {ex.exploitability_score !== undefined && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ width: "120px", height: "6px", background: "#1f1f2e", borderRadius: "4px", overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${(ex.exploitability_score / 10) * 100}%`, background: tc, borderRadius: "4px" }} />
+                    </div>
+                    <span style={{ fontSize: "13px", color: tc, fontWeight: 700 }}>{ex.exploitability_score}/10</span>
+                  </div>
+                )}
+                {ex.tier_label && <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: `${tc}18`, color: tc, border: `1px solid ${tc}44`, fontWeight: 600 }}>{ex.tier_label}</span>}
+                {ex.patch_priority && <span style={{ fontSize: "11px", color: "#71717a" }}>Patch Priority: <span style={{ color: "#a1a1aa" }}>{ex.patch_priority}</span></span>}
+              </div>
+
+              <Grid items={[
+                ["Exploit Count",    ex.exploit_count !== undefined ? String(ex.exploit_count) : undefined],
+                ["Raw Exploit Count",String(ex.raw_exploit_count)],
+                ["EPSS Estimate",    ex.epss_estimate !== undefined ? `${(ex.epss_estimate * 100).toFixed(2)}%` : undefined],
+                ["Has Metasploit",   ex.has_metasploit !== undefined ? (ex.has_metasploit ? "Yes" : "No") : undefined],
+                ["Has Full Exploit", ex.has_full_exploit !== undefined ? (ex.has_full_exploit ? "Yes" : "No") : undefined],
+                ["In The Wild",      ex.in_the_wild !== undefined ? (ex.in_the_wild ? "Yes" : "No") : undefined],
+                ["Exploit Maturity", ex.exploit_maturity],
+                ["Attack Complexity",ex.attack_complexity],
+                ["Attacker Profile", ex.attacker_profile],
+                ["Analysed At",      new Date(exploit.analysed_at).toLocaleString()],
+              ]} />
+
+              {ex.executive_summary && <TextBlock label="Executive Summary" content={ex.executive_summary} />}
+              {ex.analysis_notes    && <TextBlock label="Analysis Notes"    content={ex.analysis_notes} />}
+              {ex.most_dangerous_url && (
+                <div style={{ marginTop: "14px" }}>
+                  <div style={TH}>Most Dangerous Exploit</div>
+                  <a href={ex.most_dangerous_url} target="_blank" rel="noreferrer"
+                    style={{ fontSize: "12px", color: "#818cf8", wordBreak: "break-all", display: "block", marginTop: "4px" }}>
+                    {ex.most_dangerous_url}
+                  </a>
+                  {ex.most_dangerous_notes && <div style={{ fontSize: "12px", color: "#71717a", marginTop: "4px" }}>{ex.most_dangerous_notes}</div>}
+                </div>
+              )}
+
+              {ex.unique_exploits && ex.unique_exploits.length > 0 && (
+                <div style={{ marginTop: "14px" }}>
+                  <div style={{ ...TH, marginBottom: "8px" }}>Known Exploits ({ex.unique_exploits.length})</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {ex.unique_exploits.map((ue, i) => (
+                      <div key={i} style={{ background: "#111118", border: "1px solid #1f1f2e", borderRadius: "8px", padding: "12px 14px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "12px", color: "white", fontWeight: 600 }}>{ue.name || ue.source}</span>
+                          <div style={{ display: "flex", gap: "6px" }}>
+                            <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "rgba(129,140,248,0.1)", color: "#818cf8", border: "1px solid rgba(129,140,248,0.2)" }}>{ue.source}</span>
+                            <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "rgba(251,191,36,0.08)", color: "#fbbf24", border: "1px solid rgba(251,191,36,0.15)" }}>{ue.exploit_type}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: "16px", fontSize: "11px", color: "#52525b", marginBottom: ue.url ? "6px" : 0 }}>
+                          <span>Reliability: <span style={{ color: "#a1a1aa" }}>{ue.reliability}</span></span>
+                          <span>Weaponization: <span style={{ color: "#a1a1aa" }}>{ue.weaponization}</span></span>
+                          <span>Skill Required: <span style={{ color: "#a1a1aa" }}>{ue.skill_required}</span></span>
+                        </div>
+                        {ue.url && <a href={ue.url} target="_blank" rel="noreferrer" style={{ fontSize: "11px", color: "#818cf8", wordBreak: "break-all" }}>{ue.url}</a>}
+                        {ue.notes && <div style={{ fontSize: "11px", color: "#71717a", marginTop: "4px" }}>{ue.notes}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {ex.mitigations && ex.mitigations.length > 0 && (
+                <div style={{ marginTop: "14px" }}>
+                  <div style={{ ...TH, marginBottom: "6px" }}>Mitigations</div>
+                  <ul style={{ margin: 0, paddingLeft: "18px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                    {ex.mitigations.map((m, i) => <li key={i} style={{ fontSize: "12px", color: "#a1a1aa" }}>{m}</li>)}
+                  </ul>
+                </div>
+              )}
+            </Section>
+          );
+        })()}
 
       </div>
     </div>

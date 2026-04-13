@@ -208,3 +208,39 @@ def delete_qualys_scan(scan_id: str) -> None:
     db = get_db()
     db.table("qualys_scan_rows").delete().eq("scan_id", scan_id).execute()
     db.table("qualys_scans").delete().eq("id", scan_id).execute()
+
+
+# ── recon_jobs ─────────────────────────────────────────────────────────────────
+
+def create_recon_job(domain: str) -> dict:
+    db = get_db()
+    res = db.table("recon_jobs").insert({
+        "domain": domain,
+        "status": "processing",
+    }).execute()
+    return res.data[0]
+
+
+def update_recon_job(job_id: str, status: str, assets: list | None = None, error: str | None = None) -> None:
+    db = get_db()
+    update: dict = {"status": status}
+    if assets is not None:
+        update["assets"] = assets
+        update["total_assets"] = len(assets)
+    if error:
+        update["error"] = error
+    if status in ("done", "error"):
+        update["completed_at"] = datetime.now(timezone.utc).isoformat()
+    db.table("recon_jobs").update(update).eq("id", job_id).execute()
+
+
+def get_recon_job(job_id: str) -> dict | None:
+    db = get_db()
+    res = db.table("recon_jobs").select("*").eq("id", job_id).execute()
+    return res.data[0] if res.data else None
+
+
+def get_all_recon_jobs() -> list[dict]:
+    db = get_db()
+    res = db.table("recon_jobs").select("*").order("created_at", desc=True).execute()
+    return res.data

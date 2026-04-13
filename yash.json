@@ -1,0 +1,387 @@
+{
+  "domain": "yash.com",
+  "timestamp": "2026-04-12 10:22:33.608974",
+  "assets": [
+    {
+      "ip": "10.10.2.101",
+      "hostnames": [
+        "autodiscover.yash.com"
+      ],
+      "asn": "Unknown",
+      "org": "Unknown",
+      "country": "Unknown",
+      "region": "Unknown",
+      "city": "Unknown",
+      "anycast": false,
+      "asset_role": "Unknown",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "49.249.104.254",
+      "hostnames": [
+        "btcvpn.yash.com"
+      ],
+      "asn": "AS45820",
+      "org": "AS45820 Tata Teleservices ISP AS",
+      "country": "IN",
+      "region": "Gujarat",
+      "city": "Ahmedabad",
+      "anycast": false,
+      "asset_role": "Unknown",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "104.17.135.180",
+      "hostnames": [
+        "campaign.yash.com"
+      ],
+      "asn": "AS13335",
+      "org": "AS13335 Cloudflare, Inc.",
+      "country": "US",
+      "region": "California",
+      "city": "San Francisco",
+      "anycast": true,
+      "asset_role": "CDN / Proxy (Cloudflare)",
+      "data_classification": "public",
+      "environment": "production"
+    },
+    {
+      "ip": "20.53.137.97",
+      "hostnames": [
+        "careers.yash.com"
+      ],
+      "asn": "AS8075",
+      "org": "AS8075 Microsoft Corporation",
+      "country": "AU",
+      "region": "New South Wales",
+      "city": "Sydney",
+      "anycast": false,
+      "asset_role": "Cloud Infrastructure (Azure)",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "14.143.131.254",
+      "hostnames": [
+        "citvpn.yash.com"
+      ],
+      "asn": "AS4755",
+      "org": "AS4755 TATA Communications formerly VSNL is Leading ISP",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Mumbai",
+      "anycast": false,
+      "asset_role": "Unknown",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "18.215.0.93",
+      "hostnames": [
+        "codequalitysq.yash.com"
+      ],
+      "asn": "AS14618",
+      "org": "AS14618 Amazon.com, Inc.",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn",
+      "anycast": false,
+      "asset_role": "Cloud Infrastructure (AWS)",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "10.6.16.32",
+      "hostnames": [
+        "dialin.yash.com",
+        "external.yash.com",
+        "meet.yash.com",
+        "sip.yash.com"
+      ],
+      "asn": "Unknown",
+      "org": "Unknown",
+      "country": "Unknown",
+      "region": "Unknown",
+      "city": "Unknown",
+      "anycast": false,
+      "asset_role": "Unknown",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "23.55.245.82",
+      "hostnames": [
+        "engage.yash.com"
+      ],
+      "asn": "AS20940",
+      "org": "AS20940 Akamai International B.V.",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Mumbai",
+      "anycast": false,
+      "asset_role": "CDN (Akamai)",
+      "data_classification": "public",
+      "environment": "production"
+    },
+    {
+      "ip": "18.208.112.46",
+      "hostnames": [
+        "event.yash.com",
+        "webinar.yash.com"
+      ],
+      "asn": "AS14618",
+      "org": "AS14618 Amazon.com, Inc.",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn",
+      "anycast": false,
+      "asset_role": "Cloud Infrastructure (AWS)",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "18.66.57.111",
+      "hostnames": [
+        "gccvaluejourney.yash.com"
+      ],
+      "asn": "AS16509",
+      "org": "AS16509 Amazon.com, Inc.",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Mumbai",
+      "anycast": false,
+      "asset_role": "Cloud Infrastructure (AWS)",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "10.10.1.198",
+      "hostnames": [
+        "hydmail006.yash.com"
+      ],
+      "asn": "Unknown",
+      "org": "Unknown",
+      "country": "Unknown",
+      "region": "Unknown",
+      "city": "Unknown",
+      "anycast": false,
+      "asset_role": "Unknown",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "10.26.2.71",
+      "hostnames": [
+        "iconnect.yash.com"
+      ],
+      "asn": "Unknown",
+      "org": "Unknown",
+      "country": "Unknown",
+      "region": "Unknown",
+      "city": "Unknown",
+      "anycast": false,
+      "asset_role": "Unknown",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "52.7.100.36",
+      "hostnames": [
+        "ithelpdesk.yash.com",
+        "ithelpdeskmsp.yash.com"
+      ],
+      "asn": "AS14618",
+      "org": "AS14618 Amazon.com, Inc.",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn",
+      "anycast": false,
+      "asset_role": "Cloud Infrastructure (AWS)",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "52.5.244.93",
+      "hostnames": [
+        "itsdmsp.yash.com"
+      ],
+      "asn": "AS14618",
+      "org": "AS14618 Amazon.com, Inc.",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn",
+      "anycast": false,
+      "asset_role": "Cloud Infrastructure (AWS)",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "10.10.2.112",
+      "hostnames": [
+        "mail.yash.com",
+        "yashmail001.yash.com"
+      ],
+      "asn": "Unknown",
+      "org": "Unknown",
+      "country": "Unknown",
+      "region": "Unknown",
+      "city": "Unknown",
+      "anycast": false,
+      "asset_role": "Mail Server",
+      "data_classification": "public",
+      "environment": "production"
+    },
+    {
+      "ip": "52.22.4.248",
+      "hostnames": [
+        "sapsupport.yash.com"
+      ],
+      "asn": "AS14618",
+      "org": "AS14618 Amazon.com, Inc.",
+      "country": "US",
+      "region": "Virginia",
+      "city": "Ashburn",
+      "anycast": false,
+      "asset_role": "Cloud Infrastructure (AWS)",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "108.158.46.73",
+      "hostnames": [
+        "staging.yash.com"
+      ],
+      "asn": "AS16509",
+      "org": "AS16509 Amazon.com, Inc.",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Mumbai",
+      "anycast": false,
+      "asset_role": "Staging / Test Server",
+      "data_classification": "internal",
+      "environment": "staging"
+    },
+    {
+      "ip": "199.60.103.226",
+      "hostnames": [
+        "web.yash.com"
+      ],
+      "asn": "AS209242",
+      "org": "AS209242 Cloudflare London, LLC",
+      "country": "US",
+      "region": "Massachusetts",
+      "city": "Cambridge",
+      "anycast": true,
+      "asset_role": "Web Server (Primary)",
+      "data_classification": "public",
+      "environment": "production"
+    },
+    {
+      "ip": "18.172.78.118",
+      "hostnames": [
+        "www.yash.com"
+      ],
+      "asn": "AS16509",
+      "org": "AS16509 Amazon.com, Inc.",
+      "country": "IN",
+      "region": "Maharashtra",
+      "city": "Mumbai",
+      "anycast": false,
+      "asset_role": "Web Server (Primary)",
+      "data_classification": "public",
+      "environment": "production"
+    },
+    {
+      "ip": "136.147.96.33",
+      "hostnames": [
+        "www2.yash.com"
+      ],
+      "asn": "AS14340",
+      "org": "AS14340 Salesforce.com, Inc.",
+      "country": "US",
+      "region": "California",
+      "city": "San Francisco",
+      "anycast": false,
+      "asset_role": "Unknown",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "10.9.1.105",
+      "hostnames": [
+        "yash.com"
+      ],
+      "asn": "Unknown",
+      "org": "Unknown",
+      "country": "Unknown",
+      "region": "Unknown",
+      "city": "Unknown",
+      "anycast": false,
+      "asset_role": "Unknown",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "10.18.1.121",
+      "hostnames": [
+        "you.yash.com"
+      ],
+      "asn": "Unknown",
+      "org": "Unknown",
+      "country": "Unknown",
+      "region": "Unknown",
+      "city": "Unknown",
+      "anycast": false,
+      "asset_role": "Unknown",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "203.197.238.116",
+      "hostnames": [
+        "MX:smtp.yash.com"
+      ],
+      "asn": "AS4755",
+      "org": "AS4755 TATA Communications formerly VSNL is Leading ISP",
+      "country": "IN",
+      "region": "Telangana",
+      "city": "Hyderabad",
+      "anycast": false,
+      "asset_role": "Mail Server",
+      "data_classification": "public",
+      "environment": "production"
+    },
+    {
+      "ip": "97.74.110.50",
+      "hostnames": [
+        "NS:pdns01.domaincontrol.com"
+      ],
+      "asn": "AS44273",
+      "org": "AS44273 Host Europe GmbH",
+      "country": "US",
+      "region": "Arizona",
+      "city": "Tempe",
+      "anycast": true,
+      "asset_role": "DNS / Nameserver",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    },
+    {
+      "ip": "173.201.78.50",
+      "hostnames": [
+        "NS:pdns02.domaincontrol.com"
+      ],
+      "asn": "AS44273",
+      "org": "AS44273 Host Europe GmbH",
+      "country": "US",
+      "region": "Arizona",
+      "city": "Tempe",
+      "anycast": true,
+      "asset_role": "DNS / Nameserver",
+      "data_classification": "Unknown",
+      "environment": "Unknown"
+    }
+  ]
+}
