@@ -96,7 +96,7 @@ Respond ONLY with valid JSON, no markdown, no explanation:
   "role_reasoning":       "<2-3 sentences citing specific ports/services/hostname>"
 }}"""
 
-    raw = llm.call(prompt)
+    raw = llm(prompt)
     try:
         # Strip any accidental markdown fences
         clean = re.sub(r"```(?:json)?|```", "", raw).strip()

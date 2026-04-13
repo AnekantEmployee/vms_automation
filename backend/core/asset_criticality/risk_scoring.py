@@ -105,7 +105,7 @@ Respond ONLY with valid JSON, no markdown, no explanation:
   "summary": "<3-sentence executive summary of risk posture for a non-technical audience>"
 }}"""
 
-    raw = llm.call(prompt)
+    raw = llm(prompt)
     try:
         clean = re.sub(r"```(?:json)?|```", "", raw).strip()
         result = json.loads(clean)

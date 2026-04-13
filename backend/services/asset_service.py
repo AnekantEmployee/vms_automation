@@ -7,7 +7,7 @@ from backend.core.asset_criticality.cve_lookup     import run_cve_lookup
 from backend.core.asset_criticality.role_inference import run_role_inference
 from backend.core.asset_criticality.risk_scoring   import run_risk_scoring
 from backend.core.asset_criticality.cache          import cache_get, cache_set
-from main_config.llm_manager                       import get_master_llm
+from main_config.llm_manager                       import llm_call
 
 
 def run_asset_agent(
@@ -45,9 +45,8 @@ def run_asset_agent(
     )
     asset.update(cve_data)
 
-    llm, _ = get_master_llm()
-    asset.update(run_role_inference(llm, asset))
-    asset.update(run_risk_scoring(llm, asset))
+    asset.update(run_role_inference(llm_call, asset))
+    asset.update(run_risk_scoring(llm_call, asset))
 
     asset["scanned_at"] = datetime.now(timezone.utc).isoformat()
 
