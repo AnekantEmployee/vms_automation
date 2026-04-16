@@ -7,7 +7,6 @@ from backend.routes.exploit import router as exploit_router
 from backend.routes.qualys  import router as qualys_router
 from backend.routes.scans   import router as scans_router
 from backend.routes.recon   import router as recon_router
-from backend.routes.recon   import router as recon_router
 import uvicorn
 
 app = FastAPI(
@@ -24,7 +23,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://10.4.32.170:3000", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -36,7 +35,6 @@ app.include_router(asset_router,   prefix="/api")
 app.include_router(exploit_router, prefix="/api")
 app.include_router(qualys_router,  prefix="/api")
 app.include_router(scans_router,   prefix="/api")
-app.include_router(recon_router,   prefix="/api")
 app.include_router(recon_router,   prefix="/api")
 
 @app.get("/", tags=["Health"])
