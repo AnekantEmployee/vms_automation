@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getQualysScan, getExploit, type QualysRow, type ExploitRecord } from "@/lib/api";
+import { getQualysScan, getExploit, analyseExploit, searchByIp, getAssetDetail, type QualysRow, type ExploitResult, type AssetRow } from "@/lib/api";
 import { AssetScanBadge } from "../../page";
 
 const TH: React.CSSProperties = { fontSize: "10px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: "3px" };
@@ -71,18 +71,47 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
   const router = useRouter();
   const [row, setRow] = useState<QualysRow | null>(null);
   const [loading, setLoading] = useState(true);
-  const [exploit, setExploit] = useState<ExploitRecord | null>(null);
+  const [exploit, setExploit] = useState<ExploitResult | null>(null);
+  const [exploitLoading, setExploitLoading] = useState(false);
+  const [assetRow, setAssetRow] = useState<AssetRow | null>(null);
 
   useEffect(() => {
     getQualysScan(scan_id)
       .then((scan) => {
         const found = scan.rows.find((r) => r.id === row_id) ?? null;
         setRow(found);
-        const cve = found?.result?.cve;
-        if (cve) getExploit(cve).then(setExploit).catch(() => {});
+        // Use embedded exploit if already processed during upload
+        if (found?.result?.exploit) {
+          setExploit(found.result.exploit as ExploitResult);
+        } else {
+          const cve = found?.result?.cve;
+          if (cve) getExploit(cve).then((rec) => setExploit(rec.result)).catch(() => {});
+        }
+        // Fetch linked asset criticality via IP
+        const ip = found?.result?.asset_ipv4;
+        if (ip) {
+          searchByIp(ip)
+            .then((rows) => {
+              if (rows.length > 0) {
+                getAssetDetail(rows[0].scan_id, rows[0].id)
+                  .then(setAssetRow)
+                  .catch(() => {});
+              }
+            })
+            .catch(() => {});
+        }
       })
       .finally(() => setLoading(false));
   }, [scan_id, row_id]);
+
+  const handleAnalyseExploit = async (cve: string) => {
+    setExploitLoading(true);
+    try {
+      const result = await analyseExploit(cve, false);
+      setExploit(result);
+    } catch {}
+    finally { setExploitLoading(false); }
+  };
 
   if (loading) return <div style={{ padding: "48px", color: "#52525b", fontSize: "13px" }}>Loading...</div>;
   if (!row?.result) return <div style={{ padding: "48px", color: "#f87171", fontSize: "13px" }}>Row not found.</div>;
@@ -246,9 +275,79 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
           </Section>
         )}
 
+        {/* Asset Criticality */}
+        {assetRow?.result && (() => {
+          const a = assetRow.result as Record<string, unknown>;
+          const tierColor: Record<string, string> = { "1": "#f87171", "2": "#fbbf24", "3": "#818cf8", "4": "#34d399" };
+          const tc = tierColor[a.tier as string] ?? "#71717a";
+          const score = a.score as number;
+          return (
+            <Section title="Asset Criticality" color="#00ff9d">
+              {/* Score bar */}
+              <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "16px", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div style={{ width: "120px", height: "6px", background: "#1f1f2e", borderRadius: "4px", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${(score / 10) * 100}%`, background: tc, borderRadius: "4px" }} />
+                  </div>
+                  <span style={{ fontSize: "13px", color: tc, fontWeight: 700 }}>{score}/10</span>
+                </div>
+                {a.tier_label && <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: `${tc}18`, color: tc, border: `1px solid ${tc}44`, fontWeight: 600 }}>{a.tier_label as string}</span>}
+              </div>
+
+              <Grid items={[
+                ["Confirmed Role",     a.confirmed_role as string],
+                ["Baseline Criticality",a.baseline_criticality as string],
+                ["Environment",        a.environment as string],
+                ["Data Classification",a.data_classification as string],
+                ["OS",                 a.os as string],
+                ["Hostname",           a.hostname as string],
+                ["Internet Facing",    a.internet_facing !== undefined ? (a.internet_facing ? "Yes" : "No") : undefined],
+                ["Open Ports",         a.open_ports_count !== undefined ? String(a.open_ports_count) : undefined],
+                ["AbuseIPDB Score",    a.abuse_confidence !== undefined && (a.abuse_confidence as number) >= 0 ? `${a.abuse_confidence}%` : undefined],
+                ["GreyNoise",          a.greynoise_classification as string],
+                ["ASN",                a.asn as string],
+                ["Hosting Provider",   a.hosting_provider as string],
+                ["Total CVEs",         a.total_cves !== undefined ? String(a.total_cves) : undefined],
+                ["Critical CVEs",      a.critical_cves !== undefined ? String(a.critical_cves) : undefined],
+                ["Max CVSS",           a.max_cvss !== undefined ? String(a.max_cvss) : undefined],
+              ]} />
+
+              {a.summary && <TextBlock label="Risk Summary" content={a.summary as string} />}
+              {a.role_reasoning && <TextBlock label="Role Reasoning" content={a.role_reasoning as string} />}
+
+              {(a.risk_factors as string[])?.length > 0 && (
+                <div style={{ marginTop: "14px" }}>
+                  <div style={{ ...TH, marginBottom: "6px" }}>Risk Factors</div>
+                  <ul style={{ margin: 0, paddingLeft: "18px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                    {(a.risk_factors as string[]).map((f, i) => <li key={i} style={{ fontSize: "12px", color: "#a1a1aa" }}>{f}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {(a.remediation as string[])?.length > 0 && (
+                <div style={{ marginTop: "14px" }}>
+                  <div style={{ ...TH, marginBottom: "6px" }}>Remediation Actions</div>
+                  <ul style={{ margin: 0, paddingLeft: "18px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                    {(a.remediation as string[]).map((r, i) => <li key={i} style={{ fontSize: "12px", color: "#a1a1aa" }}>{r}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {(a.services as string[])?.length > 0 && (
+                <div style={{ marginTop: "14px" }}>
+                  <div style={TH}>Services</div>
+                  <div style={{ marginTop: "6px" }}>
+                    <Chips items={a.services as string[]} color="#34d399" bg="rgba(52,211,153,0.08)" border="rgba(52,211,153,0.2)" />
+                  </div>
+                </div>
+              )}
+            </Section>
+          );
+        })()}
+
         {/* CVE Exploitability */}
-        {exploit && (() => {
-          const ex = exploit.result;
+        {exploit ? (() => {
+          const ex = exploit;
           const tierColor: Record<string, string> = {
             critical: "#f87171", high: "#fbbf24", medium: "#818cf8", low: "#34d399",
           };
@@ -279,19 +378,19 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
                 ["Exploit Maturity", ex.exploit_maturity],
                 ["Attack Complexity",ex.attack_complexity],
                 ["Attacker Profile", ex.attacker_profile],
-                ["Analysed At",      new Date(exploit.analysed_at).toLocaleString()],
+                ["Analysed At",      ex.analysed_at ? new Date(ex.analysed_at as string).toLocaleString() : undefined],
               ]} />
 
-              {ex.executive_summary && <TextBlock label="Executive Summary" content={ex.executive_summary} />}
-              {ex.analysis_notes    && <TextBlock label="Analysis Notes"    content={ex.analysis_notes} />}
+              {ex.executive_summary && <TextBlock label="Executive Summary" content={ex.executive_summary as string} />}
+              {ex.analysis_notes    && <TextBlock label="Analysis Notes"    content={ex.analysis_notes as string} />}
               {ex.most_dangerous_url && (
                 <div style={{ marginTop: "14px" }}>
                   <div style={TH}>Most Dangerous Exploit</div>
-                  <a href={ex.most_dangerous_url} target="_blank" rel="noreferrer"
+                  <a href={ex.most_dangerous_url as string} target="_blank" rel="noreferrer"
                     style={{ fontSize: "12px", color: "#818cf8", wordBreak: "break-all", display: "block", marginTop: "4px" }}>
-                    {ex.most_dangerous_url}
+                    {ex.most_dangerous_url as string}
                   </a>
-                  {ex.most_dangerous_notes && <div style={{ fontSize: "12px", color: "#71717a", marginTop: "4px" }}>{ex.most_dangerous_notes}</div>}
+                  {ex.most_dangerous_notes && <div style={{ fontSize: "12px", color: "#71717a", marginTop: "4px" }}>{ex.most_dangerous_notes as string}</div>}
                 </div>
               )}
 
@@ -331,7 +430,20 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
               )}
             </Section>
           );
-        })()}
+        })() : r.cve ? (
+          <Section title="CVE Exploitability" color="#f87171">
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <span style={{ fontSize: "13px", color: "#52525b" }}>No exploit analysis yet for {r.cve}.</span>
+              <button
+                onClick={() => handleAnalyseExploit(r.cve!)}
+                disabled={exploitLoading}
+                style={{ padding: "6px 14px", background: exploitLoading ? "#1f1f2e" : "rgba(239,68,68,0.15)", color: exploitLoading ? "#52525b" : "#f87171", border: "1px solid rgba(239,68,68,0.25)", borderRadius: "6px", fontSize: "12px", fontWeight: 600, cursor: exploitLoading ? "default" : "pointer" }}
+              >
+                {exploitLoading ? "Analysing..." : "Analyse Now"}
+              </button>
+            </div>
+          </Section>
+        ) : null}
 
       </div>
     </div>

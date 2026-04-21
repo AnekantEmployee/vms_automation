@@ -4,6 +4,8 @@ import pandas as pd
 from datetime import datetime, timezone
 from backend.db.client import get_db
 from backend.services.qualys_service import query_by_qids
+from backend.services.exploit_service import run_exploit_agent
+from backend.db.queries import upsert_cve_exploitability, get_cve_exploitability
 
 
 # ── Column map: Excel header → internal key ────────────────────────────────────
@@ -161,13 +163,53 @@ async def process_qualys_excel(job_id: str, file_bytes: bytes, filename: str = "
         except Exception:
             pass  # KB enrichment is best-effort; don't fail the whole scan
 
+    # ── Analyse exploitability for all unique CVEs in one batch ────────────────
+    # Prefer CVE IDs from KB results (cve_ids list); fall back to Excel cve column
+    unique_cves: set[str] = set()
+    for r in rows_payload:
+        qid_key = str(r["data"].get("qid", ""))
+        kb = kb_map.get(qid_key)
+        if kb and kb.get("cve_ids"):
+            for cid in kb["cve_ids"]:
+                if cid.upper().startswith("CVE-"):
+                    unique_cves.add(cid.upper())
+        elif r["data"].get("cve") and r["data"]["cve"].upper().startswith("CVE-"):
+            unique_cves.add(r["data"]["cve"].upper())
+    exploit_map: dict[str, dict] = {}
+    for cve_id in unique_cves:
+        try:
+            cached = get_cve_exploitability(cve_id)
+            if cached:
+                exploit_map[cve_id.upper()] = cached["result"]
+            else:
+                result_ex = await asyncio.to_thread(run_exploit_agent, cve_id)
+                upsert_cve_exploitability(cve_id, result_ex)
+                exploit_map[cve_id.upper()] = result_ex
+        except Exception:
+            pass  # exploit enrichment is best-effort; don't fail the whole scan
+
     async def _process_one(row_payload: dict):
         row_id = row_id_map[row_payload["row_index"]]
         try:
             result = dict(row_payload["data"])
-            kb = kb_map.get(str(result.get("qid", "")))
+            qid_key = str(result.get("qid", ""))
+            kb = kb_map.get(qid_key)
             if kb:
                 result["kb"] = kb
+            
+            # Attach exploit results for all CVEs (from KB or Excel)
+            cves_to_check = []
+            if kb and kb.get("cve_ids"):
+                cves_to_check.extend([c.upper() for c in kb["cve_ids"] if c.upper().startswith("CVE-")])
+            elif result.get("cve") and result["cve"].upper().startswith("CVE-"):
+                cves_to_check.append(result["cve"].upper())
+            
+            if cves_to_check:
+                # If multiple CVEs, attach the first one's exploit result
+                exploit = exploit_map.get(cves_to_check[0])
+                if exploit:
+                    result["exploit"] = exploit
+            
             _update_qualys_row_result(row_id, result)
         except Exception as e:
             _update_qualys_row_error(row_id, str(e))
