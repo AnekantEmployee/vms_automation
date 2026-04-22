@@ -6,7 +6,8 @@ from backend.services.qualys_service import query_by_qids, debug_raw_xml, _kb_re
 from backend.services.qualys_processor import process_qualys_excel
 from backend.db.queries import (
     get_all_qualys_scans, get_qualys_scan, get_qualys_scan_rows,
-    get_qualys_scan_row, delete_qualys_scan, delete_qualys_scan_row,
+    get_qualys_scan_rows_with_summary, get_qualys_scan_row,
+    delete_qualys_scan, delete_qualys_scan_row,
 )
 
 router = APIRouter(tags=["Qualys"])
@@ -67,7 +68,7 @@ def get_qualys_scan_detail(scan_id: str):
     session = get_qualys_scan(scan_id)
     if not session:
         raise HTTPException(status_code=404, detail="Qualys scan not found")
-    return {**session, "rows": get_qualys_scan_rows(scan_id)}
+    return {**session, "rows": get_qualys_scan_rows_with_summary(scan_id)}
 
 
 @router.get("/qualys/scans/{scan_id}/{row_id}")

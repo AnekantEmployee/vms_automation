@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getQualysScan, getExploit, analyseExploit, searchByIp, getAssetDetail, type QualysRow, type ExploitResult, type AssetRow } from "@/lib/api";
+import { getQualysRow, getExploit, analyseExploit, searchByIp, getAssetDetail, type QualysRow, type QualysRisk, type ExploitResult, type AssetRow } from "@/lib/api";
 import { AssetScanBadge } from "../../page";
 
 const TH: React.CSSProperties = { fontSize: "10px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: "3px" };
@@ -85,18 +85,15 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
   const [assetRow, setAssetRow] = useState<AssetRow | null>(null);
 
   useEffect(() => {
-    getQualysScan(scan_id)
-      .then((scan) => {
-        const found = scan.rows.find((r) => r.id === row_id) ?? null;
+    getQualysRow(scan_id, row_id)
+      .then((found) => {
         setRow(found);
-        // Use embedded exploit if already processed during upload
         if (found?.result?.exploit) {
           setExploit(found.result.exploit as ExploitResult);
         } else {
           const cve = found?.result?.cve;
           if (cve) getExploit(cve).then((rec) => setExploit(rec.result)).catch(() => {});
         }
-        // Fetch linked asset criticality via IP
         const ip = found?.result?.asset_ipv4;
         if (ip) {
           searchByIp(ip)
@@ -159,6 +156,122 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+
+        {/* Risk Assessment */}
+        {r.risk && (() => {
+          const risk = r.risk as QualysRisk;
+          const labelColor: Record<string, string> = {
+            Critical: "#f87171", High: "#fbbf24", Medium: "#818cf8", Low: "#34d399",
+          };
+          const lc = labelColor[risk.risk_label] ?? "#71717a";
+          const isUrl = (s: string) => s.startsWith("http://") || s.startsWith("https://");
+          const urlEvidences  = (risk.evidences ?? []).filter(isUrl);
+          const textEvidences = (risk.evidences ?? []).filter((e) => !isUrl(e));
+          return (
+            <div style={{ background: "#0d0d14", border: `1px solid ${lc}33`, borderRadius: "14px", overflow: "hidden" }}>
+
+              {/* ── Header bar ── */}
+              <div style={{ padding: "18px 24px", borderBottom: `1px solid ${lc}22`, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px", background: `${lc}08` }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ fontSize: "11px", color: lc, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Risk Assessment</div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: `${lc}18`, color: lc, border: `1px solid ${lc}44`, fontWeight: 700 }}>{risk.risk_label}</span>
+                  {risk.urgency && (
+                    <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: "rgba(113,113,122,0.12)", color: "#a1a1aa", border: "1px solid #2a2a3a", fontWeight: 600 }}>Urgency: {risk.urgency}</span>
+                  )}
+                  {risk.asset_domain && (
+                    <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: "rgba(113,113,122,0.08)", color: "#71717a", border: "1px solid #1f1f2e" }}>Domain: <span style={{ color: "#d4d4d8" }}>{risk.asset_domain}</span></span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ padding: "24px" }}>
+
+                {/* ── Hero: big score + bar + summary ── */}
+                <div style={{ display: "flex", gap: "28px", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap" }}>
+                  {/* Score circle */}
+                  <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "88px", height: "88px", borderRadius: "50%", border: `3px solid ${lc}55`, background: `${lc}0d` }}>
+                    <span style={{ fontSize: "26px", fontWeight: 800, color: lc, lineHeight: 1 }}>{risk.risk_score}</span>
+                    <span style={{ fontSize: "10px", color: `${lc}99`, marginTop: "2px" }}>/10</span>
+                  </div>
+                  {/* Bar + summary */}
+                  <div style={{ flex: 1, minWidth: "200px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+                      <div style={{ flex: 1, height: "8px", background: "#1a1a28", borderRadius: "4px", overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${(risk.risk_score / 10) * 100}%`, background: `linear-gradient(90deg, ${lc}88, ${lc})`, borderRadius: "4px", transition: "width 0.4s ease" }} />
+                      </div>
+                      <span style={{ fontSize: "12px", color: "#52525b", whiteSpace: "nowrap" }}>{risk.risk_score} / 10</span>
+                    </div>
+                    {risk.risk_summary && (
+                      <p style={{ margin: 0, fontSize: "14px", color: "#d4d4d8", lineHeight: 1.7 }}>{risk.risk_summary}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* ── Two-column body ── */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "20px" }}>
+
+                  {/* Risk Factors */}
+                  {risk.risk_factors?.length > 0 && (
+                    <div style={{ background: "#111118", border: "1px solid #1f1f2e", borderRadius: "10px", padding: "16px 18px" }}>
+                      <div style={{ fontSize: "10px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 700, marginBottom: "12px" }}>Risk Factors</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {risk.risk_factors.map((f, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                            <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: lc, flexShrink: 0, marginTop: "5px" }} />
+                            <span style={{ fontSize: "13px", color: "#c4c4cc", lineHeight: 1.5 }}>{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Text evidences (non-URL) */}
+                  {textEvidences.length > 0 && (
+                    <div style={{ background: "#111118", border: "1px solid #1f1f2e", borderRadius: "10px", padding: "16px 18px" }}>
+                      <div style={{ fontSize: "10px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 700, marginBottom: "12px" }}>Threat Intel</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {textEvidences.map((e, i) => (
+                          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                            <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#52525b", flexShrink: 0, marginTop: "5px" }} />
+                            <span style={{ fontSize: "13px", color: "#a1a1aa", lineHeight: 1.5 }}>{e}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Exploit Evidence URLs ── */}
+                {urlEvidences.length > 0 && (
+                  <div style={{ background: "#111118", border: "1px solid #1f1f2e", borderRadius: "10px", padding: "16px 18px", marginBottom: "20px" }}>
+                    <div style={{ fontSize: "10px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.07em", fontWeight: 700, marginBottom: "12px" }}>Exploit Evidence ({urlEvidences.length})</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {urlEvidences.map((raw, i) => {
+                        const sepIdx = raw.indexOf(": ");
+                        const url  = sepIdx > 0 ? raw.slice(0, sepIdx).trim() : raw.trim();
+                        const note = sepIdx > 0 ? raw.slice(sepIdx + 2).trim() : "";
+                        return (
+                          <div key={i} style={{ padding: "10px 12px", background: "#0d0d14", borderRadius: "7px", border: "1px solid #1a1a28" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: note ? "6px" : 0 }}>
+                              <svg width="12" height="12" fill="none" stroke="#818cf8" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                              <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: "12px", color: "#818cf8", wordBreak: "break-all", lineHeight: 1.4 }}>{url}</a>
+                            </div>
+                            {note && <div style={{ fontSize: "11px", color: "#71717a", lineHeight: 1.5, paddingLeft: "20px" }}>{note}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Detection Info */}
         <Section title="Detection">

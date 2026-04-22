@@ -102,7 +102,7 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1f1f2e" }}>
-                {["CVE", "Title", "Asset IP", "Asset Scan", "Severity", "CVSSv3", "Status", "Last Detected", ""].map((h) => (
+                {["CVE", "Title", "Asset IP", "Asset Scan", "Severity", "CVSSv3", "Risk", "Status", "Last Detected", ""].map((h) => (
                   <th key={h} style={TH}>{h}</th>
                 ))}
               </tr>
@@ -122,6 +122,18 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
                     <td style={TD}><AssetScanBadge ip={r?.asset_ipv4 ?? ""} /></td>
                     <td style={TD}><SeverityBadge level={r?.severity ?? ""} /></td>
                     <td style={TD}><CvssChip score={r?.cvss_v3 ?? ""} /></td>
+                    <td style={TD}>{(() => {
+                      const risk = r?.risk as { risk_label?: string; risk_score?: number; urgency?: string } | undefined;
+                      if (!risk?.risk_label) return <span style={{ color: "#3f3f46" }}>—</span>;
+                      const lc: Record<string, string> = { Critical: "#f87171", High: "#fbbf24", Medium: "#818cf8", Low: "#34d399" };
+                      const c = lc[risk.risk_label] ?? "#71717a";
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                          <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "999px", background: `${c}18`, color: c, border: `1px solid ${c}44`, fontWeight: 700, width: "fit-content" }}>{risk.risk_label}</span>
+                          {risk.urgency && <span style={{ fontSize: "10px", color: "#52525b" }}>{risk.urgency}</span>}
+                        </div>
+                      );
+                    })()}</td>
                     <td style={{ ...TD, color: "#71717a" }}>{r?.vuln_status || "—"}</td>
                     <td style={{ ...TD, color: "#71717a", fontSize: "12px" }}>{r?.last_detected || "—"}</td>
                     <td style={{ padding: "14px 20px" }} onClick={(e) => e.stopPropagation()}>

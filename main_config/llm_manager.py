@@ -502,6 +502,20 @@ def _rotate_gemini() -> None:
     )
 
 
+def get_next_llm(temperature: Optional[float] = None, prefer_groq: bool = True) -> Tuple[LLM, str]:
+    """
+    Rotate to the next available LLM and return it.
+    Used by CrewAI agents to get a fresh LLM after a rate-limit hit.
+    """
+    if prefer_groq and USE_GROQ and GROQ_API_KEYS:
+        _rotate_groq()
+        return get_master_llm(temperature=temperature, prefer_groq=True)
+    elif USE_GEMINI and GEMINI_API_KEYS:
+        _rotate_gemini()
+        return get_master_llm(temperature=temperature, prefer_groq=False)
+    raise RuntimeError("No providers available to rotate to.")
+
+
 def llm_call(prompt: str, temperature: Optional[float] = None, prefer_groq: bool = True) -> str:
     """
     Call the LLM with full automatic runtime rotation on rate-limit errors.

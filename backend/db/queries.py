@@ -124,7 +124,7 @@ def get_scan_row(row_id: str) -> dict | None:
 
 def search_scan_rows_by_ip(ip: str) -> list[dict]:
     db = get_db()
-    res = db.table("asset_scan_rows").select("*").ilike("ip", f"%{ip}%").execute()
+    res = db.table("asset_scan_rows").select("id, scan_id, row_index, ip, declared_role, status, scanned_at").ilike("ip", f"%{ip}%").execute()
     return res.data
 
 
@@ -182,10 +182,11 @@ def get_qualys_scan(scan_id: str) -> dict | None:
 
 
 def get_qualys_scan_rows(scan_id: str) -> list[dict]:
+    """Fetch all rows for a scan — result column excluded (too large for bulk fetch)."""
     db = get_db()
     res = (
         db.table("qualys_scan_rows")
-        .select("*")
+        .select("id, scan_id, row_index, status, started_at, scanned_at")
         .eq("scan_id", scan_id)
         .order("row_index")
         .execute()
@@ -193,9 +194,57 @@ def get_qualys_scan_rows(scan_id: str) -> list[dict]:
     return res.data
 
 
+def get_qualys_scan_rows_with_summary(scan_id: str) -> list[dict]:
+    """Fetch rows with only the summary fields needed for the table view."""
+    db = get_db()
+    res = (
+        db.table("qualys_scan_rows")
+        .select("id, scan_id, row_index, status, started_at, scanned_at, result")
+        .eq("scan_id", scan_id)
+        .order("row_index")
+        .execute()
+    )
+    # Strip result down to only what the table view needs
+    rows = []
+    for r in res.data:
+        full = r.get("result") or {}
+        risk = full.get("risk") or {}
+        r["result"] = {
+            "cve":          full.get("cve"),
+            "title":        full.get("title"),
+            "severity":     full.get("severity"),
+            "asset_ipv4":   full.get("asset_ipv4"),
+            "cvss_v3":      full.get("cvss_v3"),
+            "vuln_status":  full.get("vuln_status"),
+            "last_detected":full.get("last_detected"),
+            "risk": {
+                "risk_label": risk.get("risk_label"),
+                "risk_score": risk.get("risk_score"),
+                "urgency":    risk.get("urgency"),
+            },
+        }
+        rows.append(r)
+    return rows
+
+
 def get_qualys_scan_row(row_id: str) -> dict | None:
     db = get_db()
     res = db.table("qualys_scan_rows").select("*").eq("id", row_id).execute()
+    return res.data[0] if res.data else None
+
+
+def get_asset_criticality_by_ip(ip: str) -> dict | None:
+    """Return the most recent done asset_scan_rows record for the given IP."""
+    db = get_db()
+    res = (
+        db.table("asset_scan_rows")
+        .select("*")
+        .eq("ip", ip)
+        .eq("status", "done")
+        .order("scanned_at", desc=True)
+        .limit(1)
+        .execute()
+    )
     return res.data[0] if res.data else None
 
 

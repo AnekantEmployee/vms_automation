@@ -150,6 +150,12 @@ export async function deleteQualysScan(scanId: string): Promise<void> {
   if (!res.ok) throw new Error("Failed to delete qualys scan");
 }
 
+export async function getQualysRow(scanId: string, rowId: string): Promise<QualysRow> {
+  const res = await fetch(`${BASE}/api/qualys/scans/${scanId}/${rowId}`);
+  if (!res.ok) throw new Error("Failed to fetch qualys row");
+  return res.json();
+}
+
 export async function deleteQualysRow(scanId: string, rowId: string): Promise<void> {
   const res = await fetch(`${BASE}/api/qualys/scans/${scanId}/${rowId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete row");
@@ -303,6 +309,16 @@ export type QualysScanSession = {
   completed_at: string | null;
 };
 
+export type QualysRisk = {
+  risk_score: number;
+  risk_label: "Critical" | "High" | "Medium" | "Low";
+  risk_summary: string;
+  asset_domain: string;
+  urgency: "Immediate" | "High" | "Medium" | "Low";
+  risk_factors: string[];
+  evidences: string[];
+};
+
 export type QualysRow = {
   id: string;
   scan_id: string;
@@ -348,6 +364,8 @@ export type QualysRow = {
     trurisk_score: string;
     vulnerability_tags: string;
     results: string;
+    risk?: QualysRisk;
+    [key: string]: unknown;
   } | null;
   started_at: string | null;
   scanned_at: string | null;
