@@ -79,6 +79,55 @@ def get_qualys_row_detail(scan_id: str, row_id: str):
     return row
 
 
+@router.post("/qualys/scans/{scan_id}/{row_id}/retry-risk")
+async def retry_risk(scan_id: str, row_id: str, background_tasks: BackgroundTasks):
+    from backend.services.qualys_processor import run_risk_agent
+    from backend.db.queries import get_qualys_scan_row, get_asset_criticality_by_ip, get_cve_exploitability
+    from backend.db.queries import upsert_cve_exploitability
+    from backend.services.exploit_service import run_exploit_agent
+    import asyncio
+
+    row = get_qualys_scan_row(row_id)
+    if not row or row.get("scan_id") != scan_id:
+        raise HTTPException(status_code=404, detail="Row not found")
+
+    async def _retry():
+        from backend.db.client import get_db
+        from datetime import datetime, timezone
+        result = dict(row.get("result") or {})
+        # re-attach exploit if missing and CVE exists
+        cve = result.get("cve", "")
+        if cve and cve.upper().startswith("CVE-") and not result.get("exploit"):
+            try:
+                cached = get_cve_exploitability(cve)
+                result["exploit"] = cached["result"] if cached else await asyncio.to_thread(run_exploit_agent, cve)
+            except Exception:
+                pass
+        # re-attach asset criticality if missing
+        ip = result.get("asset_ipv4", "")
+        if ip and not result.get("asset_criticality"):
+            try:
+                rec = await asyncio.to_thread(get_asset_criticality_by_ip, ip)
+                if rec:
+                    result["asset_criticality"] = rec
+            except Exception:
+                pass
+        # always run risk agent regardless of CVE presence
+        try:
+            result["risk"] = await asyncio.to_thread(run_risk_agent, result)
+        except Exception as e:
+            result["risk"] = {"error": str(e)}
+        db = get_db()
+        db.table("qualys_scan_rows").update({
+            "status": "done",
+            "result": result,
+            "scanned_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", row_id).execute()
+
+    background_tasks.add_task(_retry)
+    return {"status": "retrying", "row_id": row_id}
+
+
 @router.delete("/qualys/scans/{scan_id}/{row_id}")
 def remove_qualys_row(scan_id: str, row_id: str):
     row = get_qualys_scan_row(row_id)

@@ -156,6 +156,11 @@ export async function getQualysRow(scanId: string, rowId: string): Promise<Qualy
   return res.json();
 }
 
+export async function retryRisk(scanId: string, rowId: string): Promise<void> {
+  const res = await fetch(`${BASE}/api/qualys/scans/${scanId}/${rowId}/retry-risk`, { method: "POST" });
+  if (!res.ok) throw new Error("Failed to retry risk");
+}
+
 export async function deleteQualysRow(scanId: string, rowId: string): Promise<void> {
   const res = await fetch(`${BASE}/api/qualys/scans/${scanId}/${rowId}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete row");

@@ -1,6 +1,22 @@
 from datetime import datetime, timezone
-from backend.db.client import get_db
+from backend.db.client import get_db, reset_db
 import json
+
+
+def _db():
+    """Get DB client, auto-reconnecting on stale connection errors."""
+    return get_db()
+
+
+def _exec(fn):
+    """Execute a DB operation, resetting the client once on RemoteProtocolError."""
+    try:
+        return fn()
+    except Exception as e:
+        if "remoteprotocol" in str(e).lower() or "server disconnected" in str(e).lower():
+            reset_db()
+            return fn()
+        raise
 
 
 # ── asset_scanning ─────────────────────────────────────────────────────────────
@@ -123,9 +139,7 @@ def get_scan_row(row_id: str) -> dict | None:
 
 
 def search_scan_rows_by_ip(ip: str) -> list[dict]:
-    db = get_db()
-    res = db.table("asset_scan_rows").select("id, scan_id, row_index, ip, declared_role, status, scanned_at").ilike("ip", f"%{ip}%").execute()
-    return res.data
+    return _exec(lambda: get_db().table("asset_scan_rows").select("id, scan_id, row_index, ip, declared_role, status, scanned_at").ilike("ip", f"%{ip}%").execute()).data
 
 
 # ── cve_exploitability ─────────────────────────────────────────────────────────
@@ -196,14 +210,7 @@ def get_qualys_scan_rows(scan_id: str) -> list[dict]:
 
 def get_qualys_scan_rows_with_summary(scan_id: str) -> list[dict]:
     """Fetch rows with only the summary fields needed for the table view."""
-    db = get_db()
-    res = (
-        db.table("qualys_scan_rows")
-        .select("id, scan_id, row_index, status, started_at, scanned_at, result")
-        .eq("scan_id", scan_id)
-        .order("row_index")
-        .execute()
-    )
+    res = _exec(lambda: get_db().table("qualys_scan_rows").select("id, scan_id, row_index, status, started_at, scanned_at, result").eq("scan_id", scan_id).order("row_index").execute())
     # Strip result down to only what the table view needs
     rows = []
     for r in res.data:

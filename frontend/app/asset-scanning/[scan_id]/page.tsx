@@ -261,7 +261,7 @@ export default function ScanDetailPage() {
       )}
 
       {/* Assets Table */}
-      <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "12px", overflow: "hidden" }}>
+      <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "12px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <div style={{ padding: "12px 20px", borderBottom: "1px solid #1f1f2e", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap" }}>
           <span style={{ fontSize: "13px", fontWeight: 600, color: "white", whiteSpace: "nowrap" }}>Assets ({visibleAssets.length}{visibleAssets.length !== scan.assets.length ? ` of ${scan.assets.length}` : ""})</span>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
@@ -292,9 +292,9 @@ export default function ScanDetailPage() {
             </button>
           </div>
         </div>
-        <div style={{ overflowX: "auto" }}>
+        <div style={{ overflowX: "auto", overflowY: "auto", maxHeight: "calc(100vh - 400px)" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "780px" }}>
-            <thead>
+            <thead style={{ position: "sticky", top: 0, zIndex: 1, background: "#0d0d14" }}>
               <tr style={{ borderBottom: "1px solid #1f1f2e" }}>
                 {["#", "IP Address", "Role", "Environment", "Time Taken", "Risk Score", "Status", ""].map((h) => (
                   <th key={h} style={TH}>{h}</th>
