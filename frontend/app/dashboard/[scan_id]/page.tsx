@@ -2,8 +2,28 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getQualysScan, deleteQualysRow, duration, type QualysScanDetail } from "@/lib/api";
-import { AssetScanBadge } from "../page";
+import { getQualysScan, deleteQualysRow, duration, searchByIp, type QualysScanDetail, type AssetRow } from "@/lib/api";
+
+function AssetIpLink({ ip }: { ip: string }) {
+  const router = useRouter();
+  const [target, setTarget] = useState<AssetRow | null>(null);
+
+  useEffect(() => {
+    if (!ip) return;
+    searchByIp(ip).then((rows) => { if (rows.length > 0) setTarget(rows[0]); }).catch(() => {});
+  }, [ip]);
+
+  if (!ip) return <span style={{ color: "#3f3f46" }}>—</span>;
+  if (!target) return <span style={{ color: "#71717a" }}>{ip}</span>;
+  return (
+    <span
+      onClick={(e) => { e.stopPropagation(); router.push(`/asset-scanning/${target.scan_id}/${target.id}`); }}
+      style={{ color: "#818cf8", cursor: "pointer", textDecoration: "underline", textDecorationColor: "#818cf844" }}
+    >
+      {ip}
+    </span>
+  );
+}
 
 const TH: React.CSSProperties = { fontSize: "11px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, padding: "12px 20px", textAlign: "left", whiteSpace: "nowrap" };
 const TD: React.CSSProperties = { fontSize: "13px", color: "#d4d4d8", padding: "14px 20px", whiteSpace: "nowrap" };
@@ -102,8 +122,8 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1f1f2e" }}>
-                {["CVE", "Title", "Asset IP", "Asset Scan", "Severity", "CVSSv3", "Risk", "Status", "Last Detected", ""].map((h) => (
-                  <th key={h} style={TH}>{h}</th>
+                {["CVE", "Title", "Asset IP", "Severity", "CVSSv3", "Risk", "Last Detected", ""].map((h) => (
+                  <th key={h} style={{ ...TH, textAlign: ["Severity", "CVSSv3", "Risk"].includes(h) ? "center" : "left" }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -118,23 +138,25 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
                     style={{ borderBottom: "1px solid #18181f", cursor: "pointer", background: hovered === row.id ? "#111118" : "transparent", transition: "background 0.15s" }}>
                     <td style={{ ...TD, color: "#a78bfa", fontFamily: "monospace", fontWeight: 600 }}>{r?.cve || "—"}</td>
                     <td style={{ ...TD, maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis" }}>{r?.title || "—"}</td>
-                    <td style={{ ...TD, fontFamily: "monospace", color: "#71717a" }}>{r?.asset_ipv4 || "—"}</td>
-                    <td style={TD}><AssetScanBadge ip={r?.asset_ipv4 ?? ""} /></td>
-                    <td style={TD}><SeverityBadge level={r?.severity ?? ""} /></td>
-                    <td style={TD}><CvssChip score={r?.cvss_v3 ?? ""} /></td>
-                    <td style={TD}>{(() => {
-                      const risk = r?.risk as { risk_label?: string; risk_score?: number; urgency?: string } | undefined;
+                    <td style={{ ...TD, fontFamily: "monospace" }}>
+                      <AssetIpLink ip={r?.asset_ipv4 ?? ""} />
+                    </td>
+                    <td style={{ ...TD, textAlign: "center" }}><SeverityBadge level={r?.severity ?? ""} /></td>
+                    <td style={{ ...TD, textAlign: "center" }}><CvssChip score={r?.cvss_v3 ?? ""} /></td>
+                    <td style={{ ...TD, textAlign: "center" }}>{(() => {
+                      const risk = r?.risk as { risk_label?: string; risk_score?: number } | undefined;
                       if (!risk?.risk_label) return <span style={{ color: "#3f3f46" }}>—</span>;
                       const lc: Record<string, string> = { Critical: "#f87171", High: "#fbbf24", Medium: "#818cf8", Low: "#34d399" };
                       const c = lc[risk.risk_label] ?? "#71717a";
                       return (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                          <span style={{ fontSize: "11px", padding: "2px 8px", borderRadius: "999px", background: `${c}18`, color: c, border: `1px solid ${c}44`, fontWeight: 700, width: "fit-content" }}>{risk.risk_label}</span>
-                          {risk.urgency && <span style={{ fontSize: "10px", color: "#52525b" }}>{risk.urgency}</span>}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+                          <div style={{ width: "36px", height: "36px", borderRadius: "50%", border: `2px solid ${c}66`, background: `${c}12`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <span style={{ fontFamily: "monospace", fontSize: "11px", fontWeight: 700, color: c }}>{risk.risk_score ?? "—"}</span>
+                          </div>
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: c }}>{risk.risk_label}</span>
                         </div>
                       );
                     })()}</td>
-                    <td style={{ ...TD, color: "#71717a" }}>{r?.vuln_status || "—"}</td>
                     <td style={{ ...TD, color: "#71717a", fontSize: "12px" }}>{r?.last_detected || "—"}</td>
                     <td style={{ padding: "14px 20px" }} onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
