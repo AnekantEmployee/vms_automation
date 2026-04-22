@@ -576,5 +576,39 @@
       "shodan_vulns": [],
       "threat_intel_summary": "AbuseIPDB confidence score: 0% (0 reports)."
     }
+  },
+  "172.31.8.9": {
+    "cached_at": "2026-04-22T08:52:06.786115+00:00",
+    "value": {
+      "internet_facing": false,
+      "asn": "",
+      "org": "",
+      "country": "",
+      "hosting_provider": "",
+      "abuse_confidence": 0,
+      "abuse_reports": 0,
+      "is_known_scanner": false,
+      "greynoise_classification": "unknown",
+      "shodan_ports": [],
+      "shodan_vulns": [],
+      "threat_intel_summary": "AbuseIPDB confidence score: 0% (0 reports)."
+    }
+  },
+  "10.9.3.6": {
+    "cached_at": "2026-04-22T08:52:53.788409+00:00",
+    "value": {
+      "internet_facing": false,
+      "asn": "",
+      "org": "",
+      "country": "",
+      "hosting_provider": "",
+      "abuse_confidence": 0,
+      "abuse_reports": 0,
+      "is_known_scanner": false,
+      "greynoise_classification": "unknown",
+      "shodan_ports": [],
+      "shodan_vulns": [],
+      "threat_intel_summary": "AbuseIPDB confidence score: 0% (0 reports)."
+    }
   }
 }
