@@ -102,7 +102,7 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
           <table style={{ width: "100%", borderCollapse: "collapse", minWidth: "900px" }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1f1f2e" }}>
-                {["CVE", "Title", "Asset IP", "Asset Scan", "Severity", "CVSSv3", "CVSSv2", "Status", "Last Detected", ""].map((h) => (
+                {["CVE", "Title", "Asset IP", "Asset Scan", "Severity", "CVSSv3", "Status", "Last Detected", ""].map((h) => (
                   <th key={h} style={TH}>{h}</th>
                 ))}
               </tr>
@@ -122,7 +122,6 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
                     <td style={TD}><AssetScanBadge ip={r?.asset_ipv4 ?? ""} /></td>
                     <td style={TD}><SeverityBadge level={r?.severity ?? ""} /></td>
                     <td style={TD}><CvssChip score={r?.cvss_v3 ?? ""} /></td>
-                    <td style={TD}><CvssChip score={r?.cvss_v2 ?? ""} /></td>
                     <td style={{ ...TD, color: "#71717a" }}>{r?.vuln_status || "—"}</td>
                     <td style={{ ...TD, color: "#71717a", fontSize: "12px" }}>{r?.last_detected || "—"}</td>
                     <td style={{ padding: "14px 20px" }} onClick={(e) => e.stopPropagation()}>

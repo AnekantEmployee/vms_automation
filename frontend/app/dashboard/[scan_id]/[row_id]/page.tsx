@@ -8,10 +8,19 @@ import { AssetScanBadge } from "../../page";
 const TH: React.CSSProperties = { fontSize: "10px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: "3px" };
 const VAL: React.CSSProperties = { fontSize: "13px", color: "#a1a1aa" };
 
-function Section({ title, color = "#52525b", children }: { title: string; color?: string; children: React.ReactNode }) {
+function Section({ title, color = "#52525b", href, children }: { title: string; color?: string; href?: string; children: React.ReactNode }) {
   return (
     <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "12px", padding: "20px 24px" }}>
-      <div style={{ fontSize: "11px", color, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: "16px" }}>{title}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+        <div style={{ fontSize: "11px", color, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>{title}</div>
+        {href && (
+          <a href={href} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", color, opacity: 0.6, lineHeight: 0 }} title={`Open ${title}`}>
+            <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        )}
+      </div>
       {children}
     </div>
   );
@@ -277,12 +286,13 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
 
         {/* Asset Criticality */}
         {assetRow?.result && (() => {
+          const assetHref = `/asset-scanning/${assetRow.scan_id}/${assetRow.id}`;
           const a = assetRow.result as Record<string, unknown>;
           const tierColor: Record<string, string> = { "1": "#f87171", "2": "#fbbf24", "3": "#818cf8", "4": "#34d399" };
           const tc = tierColor[a.tier as string] ?? "#71717a";
           const score = a.score as number;
           return (
-            <Section title="Asset Criticality" color="#00ff9d">
+            <Section title="Asset Criticality" color="#00ff9d" href={assetHref}>
               {/* Score bar */}
               <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "16px", flexWrap: "wrap" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -353,7 +363,7 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
           };
           const tc = tierColor[ex.exploitability_tier?.toLowerCase() ?? ""] ?? "#71717a";
           return (
-            <Section title="CVE Exploitability" color="#f87171">
+            <Section title="CVE Exploitability" color="#f87171" href={r.cve ? `/cve-exploitability/${r.cve}` : undefined}>
               {/* Summary bar */}
               <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "16px", flexWrap: "wrap" }}>
                 {ex.exploitability_score !== undefined && (
@@ -431,7 +441,7 @@ export default function QualysRowDetailPage({ params }: { params: Promise<{ scan
             </Section>
           );
         })() : r.cve ? (
-          <Section title="CVE Exploitability" color="#f87171">
+          <Section title="CVE Exploitability" color="#f87171" href={`/cve-exploitability/${r.cve}`}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
               <span style={{ fontSize: "13px", color: "#52525b" }}>No exploit analysis yet for {r.cve}.</span>
               <button
