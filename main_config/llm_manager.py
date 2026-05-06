@@ -28,7 +28,6 @@ GEMINI_MODELS: List[str] = [
 GROQ_MODELS: List[str] = [
     "groq/llama-3.3-70b-versatile",                    # TPD 100k — best quality
     "groq/meta-llama/llama-4-scout-17b-16e-instruct",  # TPD 100k — Llama 4
-    "groq/moonshotai/kimi-k2-instruct",                # latest Kimi K2
     "groq/qwen/qwen3-32b",                             # Qwen 32B
     "groq/llama-3.1-8b-instant",                       # TPD 500k — high quota fallback
 ]
@@ -102,9 +101,12 @@ _RATE_LIMIT_SIGNALS = (
     "service unavailable",
     "tool_use_failed",
     "failed to call a function",
-    "model_decommissioned",       # model removed — rotate to next
+    "model_decommissioned",
     "decommissioned",
     "no longer supported",
+    "model_not_found",
+    "does not exist",
+    "you do not have access",
 )
 
 

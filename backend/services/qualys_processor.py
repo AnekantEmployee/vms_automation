@@ -145,6 +145,10 @@ def _update_qualys_session_status(scan_id: str, status: str) -> None:
 
 # ── Main processor ─────────────────────────────────────────────────────────────
 
+# Limit concurrent risk agent threads to avoid overwhelming the DB connection
+_RISK_SEMAPHORE = asyncio.Semaphore(3)
+
+
 async def process_qualys_excel(job_id: str, file_bytes: bytes, filename: str = "", scan_name: str = "") -> str:
     df = _read_df(file_bytes, filename)
     total = len(df)
@@ -231,11 +235,12 @@ async def process_qualys_excel(job_id: str, file_bytes: bytes, filename: str = "
             if ip and ip in asset_map:
                 result["asset_criticality"] = asset_map[ip]
 
-            try:
-                result["risk"] = await asyncio.to_thread(run_risk_agent, result)
-            except Exception as risk_err:
-                logger.error(f"[risk_agent] row {row_id} FAILED: {risk_err}\n{traceback.format_exc()}")
-                result["risk"] = {"error": str(risk_err)}
+            async with _RISK_SEMAPHORE:
+                try:
+                    result["risk"] = await asyncio.to_thread(run_risk_agent, result)
+                except Exception as risk_err:
+                    logger.error(f"[risk_agent] row {row_id} FAILED: {risk_err}\n{traceback.format_exc()}")
+                    result["risk"] = {"error": str(risk_err)}
 
             _update_qualys_row_result(row_id, result)
         except Exception as e:
