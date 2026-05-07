@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { use, useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
@@ -78,9 +78,9 @@ function AttackChainPanel({ ip, onClose }: { ip: string; onClose: () => void }) 
   if (loading) return (
     <div style={{ background: "#0d0d14", border: "1px solid #1f1f2e", borderRadius: "12px", padding: "40px", textAlign: "center" }}>
       <div style={{ fontSize: "13px", color: "#52525b", marginBottom: "8px" }}>
-        {reanalyzing ? "Reanalyzing" : "Generating"} attack chain for <span style={{ color: "#818cf8", fontFamily: "monospace" }}>{ip}</span>â€¦
+        {reanalyzing ? "Reanalyzing" : "Generating"} attack chain for <span style={{ color: "#818cf8", fontFamily: "monospace" }}>{ip}</span>...
       </div>
-      <div style={{ fontSize: "11px", color: "#3f3f46" }}>This may take 30â€“60 seconds</div>
+      <div style={{ fontSize: "11px", color: "#3f3f46" }}>This may take 30-60 seconds</div>
     </div>
   );
 
@@ -111,9 +111,9 @@ function AttackChainPanel({ ip, onClose }: { ip: string; onClose: () => void }) 
           <span style={{ fontSize: "11px", color: overallColor, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700 }}>Attack Chain</span>
           <span style={{ fontFamily: "monospace", fontSize: "12px", color: "#71717a" }}>{ip}</span>
           <span style={{ fontSize: "11px", padding: "3px 10px", borderRadius: "999px", background: `${overallColor}18`, color: overallColor, border: `1px solid ${overallColor}44`, fontWeight: 700 }}>
-            {r.overall_risk_label} Â· {r.overall_risk_score}/10
+            {r.overall_risk_label} &middot; {r.overall_risk_score}/10
           </span>
-          <span style={{ fontSize: "11px", color: "#52525b" }}>{r.attack_chain?.length ?? 0} steps Â· {phases.length} phases</span>
+          <span style={{ fontSize: "11px", color: "#52525b" }}>{r.attack_chain?.length ?? 0} steps &middot; {phases.length} phases</span>
           <span style={{ fontSize: "11px", color: "#3f3f46" }}>
             {new Date(chain.created_at).toLocaleString()}
           </span>
@@ -124,7 +124,7 @@ function AttackChainPanel({ ip, onClose }: { ip: string; onClose: () => void }) 
             <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
             Reanalyze
           </button>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: "18px", lineHeight: 1, padding: "2px 6px" }}>Ã—</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#52525b", cursor: "pointer", fontSize: "18px", lineHeight: 1, padding: "2px 6px" }}>&times;</button>
         </div>
       </div>
 
@@ -143,9 +143,9 @@ function AttackChainPanel({ ip, onClose }: { ip: string; onClose: () => void }) 
             return (
               <div key={phase}>
                 {pi > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", padding: "0 0 0 10px", margin: "4px 0" }}>
-                    <div style={{ width: "2px", height: "12px", background: "#2a2a3a", marginLeft: "8px" }} />
-                    <svg width="12" height="8" viewBox="0 0 12 8"><path d="M6 8L0 0h12z" fill={pc + "66"} /></svg>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 0 6px 10px" }}>
+                    <div style={{ width: "2px", height: "20px", background: "linear-gradient(to bottom, #2a2a3a, " + pc + "44)" }} />
+                    <span style={{ fontSize: "10px", color: "#3f3f46" }}>then</span>
                   </div>
                 )}
                 <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px", padding: "6px 10px", background: pc + "08", borderRadius: "8px", border: "1px solid " + pc + "18" }}>
@@ -155,66 +155,56 @@ function AttackChainPanel({ ip, onClose }: { ip: string; onClose: () => void }) 
                   <span style={{ fontSize: "11px", fontWeight: 700, color: pc, textTransform: "uppercase", letterSpacing: "0.08em" }}>{phase}</span>
                   <span style={{ fontSize: "10px", color: pc + "66" }}>{steps.length} step{steps.length > 1 ? "s" : ""}</span>
                 </div>
-                <div style={{ marginLeft: "16px", overflowX: "auto", paddingBottom: "4px" }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", minWidth: "max-content" }}>
-                    {steps.map((step, si) => {
-                      const isExpanded = expandedStep === step.step;
-                      const sc = PHASE_COLOR[step.phase] ?? "#71717a";
-                      const isCritical = r.critical_path?.some(cp => cp.includes(step.cve) || cp.includes(step.title));
-                      const depSteps = (step.depends_on_steps ?? []).map(n => r.attack_chain?.find(s => s.step === n)).filter(Boolean) as AttackChainStep[];
-                      return (
-                        <div key={step.step} style={{ display: "flex", alignItems: "flex-start" }}>
-                          {si > 0 && (
-                            <div style={{ display: "flex", alignItems: "center", alignSelf: "flex-start", marginTop: "16px", flexShrink: 0 }}>
-                              <div style={{ width: "16px", height: "2px", background: sc + "44" }} />
-                              <svg width="6" height="10" viewBox="0 0 6 10"><path d="M0 0l6 5-6 5z" fill={sc + "66"} /></svg>
-                            </div>
-                          )}
-                          <div onClick={() => setExpandedStep(isExpanded ? null : step.step)}
-                            style={{ width: "200px", flexShrink: 0, background: isExpanded ? "#111118" : "#0a0a12", border: "1px solid " + (isExpanded ? sc + "55" : "#1a1a28"), borderRadius: "8px", padding: "10px 12px", cursor: "pointer", position: "relative" }}>
-                            {isCritical && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(to right, #f87171, transparent)", borderRadius: "8px 8px 0 0" }} />}
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                              <div style={{ width: "18px", height: "18px", borderRadius: "4px", background: sc + "18", border: "1px solid " + sc + "44", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                                <span style={{ fontSize: "9px", fontWeight: 700, color: sc }}>{step.step}</span>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginLeft: "16px" }}>
+                  {steps.map((step) => {
+                    const isExpanded = expandedStep === step.step;
+                    const sc = PHASE_COLOR[step.phase] ?? "#71717a";
+                    const isCritical = r.critical_path?.some(cp => cp.includes(step.cve) || cp.includes(step.title));
+                    const depSteps = (step.depends_on_steps ?? []).map(n => r.attack_chain?.find(s => s.step === n)).filter(Boolean) as AttackChainStep[];
+                    return (
+                      <div key={step.step} onClick={() => setExpandedStep(isExpanded ? null : step.step)}
+                        style={{ background: isExpanded ? "#111118" : "#0a0a12", border: "1px solid " + (isExpanded ? sc + "55" : "#1a1a28"), borderRadius: "8px", padding: "12px 16px", cursor: "pointer", position: "relative" }}>
+                        {isCritical && <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(to right, #f87171, transparent)", borderRadius: "8px 8px 0 0" }} />}
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+                          <div style={{ width: "22px", height: "22px", borderRadius: "5px", background: sc + "18", border: "1px solid " + sc + "44", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                            <span style={{ fontSize: "10px", fontWeight: 700, color: sc }}>{step.step}</span>
+                          </div>
+                          {step.cve && <span style={{ fontFamily: "monospace", fontSize: "11px", color: "#a78bfa", fontWeight: 600 }}>{step.cve}</span>}
+                          <span style={{ fontSize: "13px", color: "#d4d4d8", fontWeight: 500, flex: 1 }}>{step.title}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+                            {isCritical && <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)", fontWeight: 600 }}>critical path</span>}
+                            {step.risk_score > 0 && <span style={{ fontSize: "11px", color: sc, fontFamily: "monospace", fontWeight: 700 }}>{step.risk_score}/10</span>}
+                            <span style={{ fontSize: "10px", color: "#3f3f46" }}>{isExpanded ? "▲" : "▼"}</span>
+                          </div>
+                        </div>
+                        {isExpanded && (
+                          <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "10px", borderTop: "1px solid " + sc + "22", paddingTop: "12px" }}>
+                            <div style={{ fontSize: "13px", color: "#a1a1aa", lineHeight: 1.7 }}>{step.description}</div>
+                            {step.chaining_insight && (
+                              <div style={{ padding: "10px 14px", background: sc + "0a", border: "1px solid " + sc + "22", borderRadius: "6px" }}>
+                                <div style={{ fontSize: "10px", color: sc, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: "4px" }}>Chaining Insight</div>
+                                <div style={{ fontSize: "13px", color: "#c4c4cc", lineHeight: 1.6 }}>{step.chaining_insight}</div>
                               </div>
-                              {step.cve && <span style={{ fontFamily: "monospace", fontSize: "10px", color: "#a78bfa", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{step.cve}</span>}
-                              {isCritical && <span style={{ fontSize: "9px", padding: "1px 5px", borderRadius: "3px", background: "rgba(239,68,68,0.12)", color: "#f87171", border: "1px solid rgba(239,68,68,0.2)", fontWeight: 600, flexShrink: 0 }}>crit</span>}
-                            </div>
-                            <div style={{ fontSize: "11px", color: "#d4d4d8", fontWeight: 500, lineHeight: 1.4, marginBottom: "6px" }}>{step.title}</div>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                              {step.risk_score > 0 && <span style={{ fontSize: "10px", color: sc, fontFamily: "monospace", fontWeight: 700 }}>{step.risk_score}/10</span>}
-                              <span style={{ fontSize: "9px", color: "#3f3f46", marginLeft: "auto" }}>{isExpanded ? "collapse" : "expand"}</span>
-                            </div>
-                            {isExpanded && (
-                              <div style={{ marginTop: "10px", display: "flex", flexDirection: "column", gap: "8px", borderTop: "1px solid " + sc + "22", paddingTop: "10px" }}>
-                                <div style={{ fontSize: "11px", color: "#a1a1aa", lineHeight: 1.6 }}>{step.description}</div>
-                                {step.chaining_insight && (
-                                  <div style={{ padding: "8px 10px", background: sc + "0a", border: "1px solid " + sc + "22", borderRadius: "6px" }}>
-                                    <div style={{ fontSize: "9px", color: sc, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: "3px" }}>Chaining Insight</div>
-                                    <div style={{ fontSize: "11px", color: "#c4c4cc", lineHeight: 1.5 }}>{step.chaining_insight}</div>
-                                  </div>
-                                )}
-                                {step.exploitability && <div style={{ fontSize: "10px", color: "#71717a" }}>Exploitability: <span style={{ color: "#a1a1aa" }}>{step.exploitability}</span></div>}
-                                {depSteps.length > 0 && (
-                                  <div>
-                                    <div style={{ fontSize: "9px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "4px" }}>Depends on</div>
-                                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                                      {depSteps.map(dep => (
-                                        <span key={dep.step} onClick={(e) => { e.stopPropagation(); setExpandedStep(dep.step); }}
-                                          style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "4px", background: (PHASE_COLOR[dep.phase] ?? "#71717a") + "18", color: PHASE_COLOR[dep.phase] ?? "#71717a", border: "1px solid " + (PHASE_COLOR[dep.phase] ?? "#71717a") + "33", cursor: "pointer", fontWeight: 600 }}>
-                                          #{dep.step} {dep.cve || dep.title.slice(0, 12)}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
+                            )}
+                            {step.exploitability && <div style={{ fontSize: "12px", color: "#71717a" }}>Exploitability: <span style={{ color: "#a1a1aa" }}>{step.exploitability}</span></div>}
+                            {depSteps.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: "10px", color: "#52525b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "6px" }}>Depends on</div>
+                                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                                  {depSteps.map(dep => (
+                                    <span key={dep.step} onClick={(e) => { e.stopPropagation(); setExpandedStep(dep.step); }}
+                                      style={{ fontSize: "11px", padding: "3px 9px", borderRadius: "5px", background: (PHASE_COLOR[dep.phase] ?? "#71717a") + "18", color: PHASE_COLOR[dep.phase] ?? "#71717a", border: "1px solid " + (PHASE_COLOR[dep.phase] ?? "#71717a") + "33", cursor: "pointer", fontWeight: 600 }}>
+                                      #{dep.step} {dep.cve || dep.title.slice(0, 20)}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -584,17 +574,78 @@ export default function QualysScanDetailPage({ params }: { params: Promise<{ sca
           {uniqueIps.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center', color: '#52525b', fontSize: '13px' }}>No IPs found in this scan.</div>
           ) : !activeChainIp ? (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', padding: '24px 0' }}>
-              {uniqueIps.map(ip => (
-                <button key={ip} onClick={() => setActiveChainIp(ip!)}
-                  style={{ background: '#0d0d14', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '12px 20px', color: '#a1a1aa', fontSize: '13px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-                  <svg width='12' height='12' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 10V3L4 14h7v7l9-11h-7z' /></svg>
-                  {ip}
-                </button>
-              ))}
+            <div>
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '14px', color: '#d4d4d8', fontWeight: 600, marginBottom: '4px' }}>Select an asset to analyse</div>
+                <div style={{ fontSize: '12px', color: '#52525b' }}>The AI will correlate all vulnerabilities on that asset and model a realistic attack chain.</div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+                {uniqueIps.map(ip => {
+                  const ipRows = rows.filter(r => r.result?.asset_ipv4 === ip);
+                  const counts: Record<string, number> = {};
+                  ipRows.forEach(r => { const s = r.result?.severity ?? ''; counts[s] = (counts[s] ?? 0) + 1; });
+                  const assetName = ipRows[0]?.result?.asset_name || '';
+                  const os = ipRows[0]?.result?.operating_system || '';
+                  const maxRisk = ipRows.reduce((max, r) => {
+                    const score = (r.result?.risk as { risk_score?: number } | undefined)?.risk_score ?? 0;
+                    return score > max ? score : max;
+                  }, 0);
+                  const riskLabel = ipRows.reduce((label, r) => {
+                    const rl = (r.result?.risk as { risk_label?: string } | undefined)?.risk_label ?? '';
+                    const order: Record<string, number> = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+                    return (order[rl] ?? 0) > (order[label] ?? 0) ? rl : label;
+                  }, '');
+                  const riskColor: Record<string, string> = { Critical: '#f87171', High: '#fbbf24', Medium: '#818cf8', Low: '#34d399' };
+                  const rc = riskColor[riskLabel] ?? '#52525b';
+                  return (
+                    <div key={ip} onClick={() => setActiveChainIp(ip!)}
+                      style={{ background: '#0d0d14', border: '1px solid #1f1f2e', borderRadius: '10px', padding: '18px 20px', cursor: 'pointer', transition: 'border-color 0.15s', position: 'relative', overflow: 'hidden' }}
+                      onMouseEnter={e => (e.currentTarget.style.borderColor = '#2a2a3a')}
+                      onMouseLeave={e => (e.currentTarget.style.borderColor = '#1f1f2e')}>
+                      {riskLabel && <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: rc }} />}
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '12px' }}>
+                        <div>
+                          <div style={{ fontFamily: 'monospace', fontSize: '14px', color: '#e4e4e7', fontWeight: 700 }}>{ip}</div>
+                          {assetName && <div style={{ fontSize: '11px', color: '#71717a', marginTop: '2px' }}>{assetName}</div>}
+                          {os && <div style={{ fontSize: '11px', color: '#52525b', marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>{os}</div>}
+                        </div>
+                        {riskLabel && (
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <div style={{ fontSize: '18px', fontWeight: 800, color: rc, fontFamily: 'monospace', lineHeight: 1 }}>{maxRisk > 0 ? maxRisk : ''}</div>
+                            <div style={{ fontSize: '10px', color: rc, fontWeight: 600 }}>{riskLabel}</div>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+                        {[['5','Crit','#f87171'],['4','High','#f87171'],['3','Med','#fbbf24'],['2','Low','#818cf8'],['1','Info','#34d399']].map(([sev, label, color]) =>
+                          counts[sev] ? (
+                            <span key={sev} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '5px', background: color + '15', color, border: '1px solid ' + color + '30', fontWeight: 600 }}>
+                              {counts[sev]} {label}
+                            </span>
+                          ) : null
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '11px', color: '#52525b' }}>{ipRows.length} vulnerabilit{ipRows.length === 1 ? 'y' : 'ies'}</span>
+                        <span style={{ fontSize: '11px', color: '#818cf8', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                          <svg width='10' height='10' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M13 10V3L4 14h7v7l9-11h-7z' /></svg>
+                          Generate chain
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : (
-            <AttackChainPanel ip={activeChainIp} onClose={() => setActiveChainIp(null)} />
+            <div>
+              <button onClick={() => setActiveChainIp(null)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', color: '#71717a', fontSize: '12px', cursor: 'pointer', padding: 0, marginBottom: '16px' }}>
+                <svg width='14' height='14' fill='none' stroke='currentColor' viewBox='0 0 24 24'><path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M15 19l-7-7 7-7' /></svg>
+                All assets
+              </button>
+              <AttackChainPanel ip={activeChainIp} onClose={() => setActiveChainIp(null)} />
+            </div>
           )}
         </div>
       )}
