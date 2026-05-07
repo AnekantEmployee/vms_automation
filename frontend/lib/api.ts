@@ -166,6 +166,22 @@ export async function deleteQualysRow(scanId: string, rowId: string): Promise<vo
   if (!res.ok) throw new Error("Failed to delete row");
 }
 
+export async function generateAttackChain(ip: string, forceRefresh = false): Promise<AttackChainRecord> {
+  const res = await fetch(`${BASE}/api/qualys/attack-chain`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ip, force_refresh: forceRefresh }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function getAttackChain(ip: string): Promise<AttackChainRecord> {
+  const res = await fetch(`${BASE}/api/qualys/attack-chain/${encodeURIComponent(ip)}`);
+  if (!res.ok) throw new Error("No attack chain found");
+  return res.json();
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export function duration(start: string | null, end: string | null): string {
@@ -377,3 +393,36 @@ export type QualysRow = {
 };
 
 export type QualysScanDetail = QualysScanSession & { rows: QualysRow[] };
+
+export type AttackChainStep = {
+  step: number;
+  phase: string;
+  cve: string;
+  title: string;
+  description: string;
+  depends_on_steps: number[];
+  risk_score: number;
+  exploitability: string;
+  chaining_insight: string;
+};
+
+export type AttackChainResult = {
+  asset_ip: string;
+  asset_summary: string;
+  overall_risk_score: number;
+  overall_risk_label: "Critical" | "High" | "Medium" | "Low";
+  attack_chain: AttackChainStep[];
+  entry_points: string[];
+  critical_path: string[];
+  blast_radius: string;
+  top_priority_fixes: { cve: string; title: string; reason: string }[];
+  chain_summary: string;
+};
+
+export type AttackChainRecord = {
+  id: string;
+  ip: string;
+  total_vulns: number;
+  result: AttackChainResult;
+  created_at: string;
+};

@@ -255,6 +255,21 @@ def get_asset_criticality_by_ip(ip: str) -> dict | None:
     return res.data[0] if res.data else None
 
 
+def get_qualys_rows_by_ip(ip: str) -> list[dict]:
+    """Fetch all done qualys rows where result->asset_ipv4 matches the given IP."""
+    db = get_db()
+    res = (
+        db.table("qualys_scan_rows")
+        .select("*")
+        .eq("status", "done")
+        .execute()
+    )
+    return [
+        r for r in res.data
+        if (r.get("result") or {}).get("asset_ipv4", "") == ip
+    ]
+
+
 def delete_qualys_scan_row(row_id: str) -> None:
     db = get_db()
     db.table("qualys_scan_rows").delete().eq("id", row_id).execute()

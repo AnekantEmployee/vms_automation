@@ -7,7 +7,7 @@ from backend.services.qualys_processor import process_qualys_excel
 from backend.db.queries import (
     get_all_qualys_scans, get_qualys_scan, get_qualys_scan_rows,
     get_qualys_scan_rows_with_summary, get_qualys_scan_row,
-    delete_qualys_scan, delete_qualys_scan_row,
+    delete_qualys_scan, delete_qualys_scan_row, get_qualys_rows_by_ip,
 )
 
 router = APIRouter(tags=["Qualys"])
@@ -135,6 +135,67 @@ def remove_qualys_row(scan_id: str, row_id: str):
         raise HTTPException(status_code=404, detail="Row not found")
     delete_qualys_scan_row(row_id)
     return {"deleted": row_id}
+
+
+@router.post("/qualys/attack-chain")
+async def generate_attack_chain(body: dict, background_tasks: BackgroundTasks):
+    from backend.services.attack_chain_service import run_attack_chain_agent
+    from backend.db.client import get_db
+    from datetime import datetime, timezone
+
+    ip = (body.get("ip") or "").strip()
+    if not ip:
+        raise HTTPException(status_code=422, detail="ip is required")
+
+    rows = get_qualys_rows_by_ip(ip)
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No done qualys rows found for IP {ip}")
+
+    # Check if a fresh chain already exists (< 1 hour old)
+    db = get_db()
+    existing = (
+        db.table("attack_chains")
+        .select("*")
+        .eq("ip", ip)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if existing.data and not body.get("force_refresh"):
+        rec = existing.data[0]
+        age_secs = (datetime.now(timezone.utc) - datetime.fromisoformat(rec["created_at"].replace("Z", "+00:00"))).total_seconds()
+        if age_secs < 3600:
+            return rec
+
+    # Run synchronously — attack chain is a single LLM call, not per-row
+    try:
+        result = await to_thread(run_attack_chain_agent, ip, rows)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    saved = db.table("attack_chains").insert({
+        "ip":         ip,
+        "total_vulns": len(rows),
+        "result":     result,
+    }).execute()
+
+    return saved.data[0]
+
+
+@router.get("/qualys/attack-chain/{ip:path}")
+def get_attack_chain(ip: str):
+    db = get_db()
+    res = (
+        db.table("attack_chains")
+        .select("*")
+        .eq("ip", ip)
+        .order("created_at", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="No attack chain found for this IP")
+    return res.data[0]
 
 
 @router.delete("/qualys/scans/{scan_id}")
