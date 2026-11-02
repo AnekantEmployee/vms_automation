@@ -162,3 +162,4 @@ The orchestration engine for vulnerability reports:
 ### `backend/services/excel_processor.py`
 - Safely decodes multi-format uploaded files (handling legacy Windows Excel codecs, `openpyxl`, and CSV delimiters).
 - Sanitizes column names to standard internal keys (`IP`, `Vulnerability Title`, `CVSS`, `Port`, `Solution`, `Results`).
+

@@ -188,3 +188,4 @@ vms_automation/
 - **Two-Tier Caching**:
   - **Memory/Disk Cache**: SHA256 hashed queries stored in `/cache/*.json` with configurable TTL (default 24h) to avoid duplicate API calls to NVD and Shodan.
   - **Database Persistence**: Supabase stores finalized asset evaluations and exploit summaries to ensure instant query times for previously scanned assets.
+

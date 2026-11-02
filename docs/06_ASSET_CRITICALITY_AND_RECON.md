@@ -156,3 +156,4 @@ python asset_agent.py
 - `Owner email / team`: Contact or DevOps lead.
 
 The script runs Nmap, collects IP intelligence, invokes the LLM, prints a colorized summary table, and saves the output into `backend/core/cache/asset_agent_results.json`.
+

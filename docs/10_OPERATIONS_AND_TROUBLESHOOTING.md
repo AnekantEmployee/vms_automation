@@ -86,3 +86,4 @@ python check_api_limit.py
 
 - **Supabase Service Keys**: Keep administrative service keys restricted to the backend service. Only expose `anon` public keys to the frontend Next.js application.
 - **Nmap Execution Safety**: Ensure Nmap scans are only directed at authorized IP ranges and assets within your organization's scope of work.
+

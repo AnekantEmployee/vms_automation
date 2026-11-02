@@ -103,3 +103,4 @@ When taking over this project, execute this onboarding routine in order:
 - [ ] Run `python check_api_limit.py` to test your Google Gemini and Groq API keys.
 - [ ] Launch both backend (`python main.py`) and frontend (`cd frontend && npm run dev`) and execute a test scan upload using sample reports in `/input`.
 - [ ] Review [`10_OPERATIONS_AND_TROUBLESHOOTING.md`](10_OPERATIONS_AND_TROUBLESHOOTING.md) for known edge cases, API rate-limiting handling, and common troubleshooting steps.
+

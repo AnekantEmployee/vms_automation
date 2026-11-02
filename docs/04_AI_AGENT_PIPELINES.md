@@ -119,3 +119,4 @@ When executing an LLM request:
   - Latency in milliseconds.
   - Completion status (success, retry, or fallback).
   - Persisted to daily JSONL files in `logs/session_<timestamp>.jsonl` with an accompanying session summary.
+

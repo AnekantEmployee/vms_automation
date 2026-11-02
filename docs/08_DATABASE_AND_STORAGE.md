@@ -149,3 +149,4 @@ When configured via `REDIS_URL` in `.env`:
 - Offloads CPU-intensive and network-bound scan tasks from the FastAPI worker thread.
 - Distributes batch vulnerability processing across multiple worker processes.
 - Falls back to `asyncio` background tasks if Redis is unavailable or unconfigured, ensuring the application remains operational without external dependencies.
+

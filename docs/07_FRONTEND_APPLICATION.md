@@ -129,3 +129,4 @@ npm run build
 npm run start
 ```
 By default, the frontend binds to port 3000 (`http://localhost:3000`).
+
