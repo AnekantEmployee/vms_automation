@@ -18,7 +18,18 @@ router = APIRouter(tags=["Scans"])
 
 @router.get("/scans")
 def list_scans():
-    sessions = get_all_scan_sessions()
+    try:
+        sessions = get_all_scan_sessions()
+    except Exception as e:
+        # Return helpful error message instead of 500
+        error_msg = str(e)
+        if "getaddrinfo" in error_msg or "DNS" in error_msg:
+            raise HTTPException(
+                status_code=503,
+                detail="Database connection failed: Check internet/DNS connectivity to Supabase"
+            )
+        raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
+    
     # Compute total asset duration (sum of started_at -> scanned_at for each row)
     for session in sessions:
         rows = get_scan_rows(session["id"])
